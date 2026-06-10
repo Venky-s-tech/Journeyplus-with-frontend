@@ -1,0 +1,82 @@
+package com.journeyplus.advance.controller;
+
+import com.journeyplus.advance.entity.AdvanceRequest;
+import com.journeyplus.advance.entity.AdvanceSettlement;
+import com.journeyplus.advance.service.AdvanceService;
+import com.journeyplus.iam.entity.User;
+import com.journeyplus.trip.entity.TripRequest;
+import com.journeyplus.trip.service.TripService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/advances")
+public class AdvanceController {
+
+    @Autowired
+    private AdvanceService advanceService;
+
+    @Autowired
+    private TripService tripService;
+
+    @PostMapping
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    public ResponseEntity<AdvanceRequest> createAdvanceRequest(
+            @RequestParam Long tripRequestId,
+            @RequestBody AdvanceRequest advanceRequest,
+            @AuthenticationPrincipal User employee) {
+        
+        TripRequest trip = tripService.getTripRequest(tripRequestId);
+        if (!trip.getEmployee().getId().equals(employee.getId())) {
+            throw new IllegalArgumentException("Trip request does not belong to the authenticated employee");
+        }
+
+        advanceRequest.setTripRequest(trip);
+        advanceRequest.setEmployee(employee);
+        return ResponseEntity.ok(advanceService.createAdvanceRequest(advanceRequest));
+    }
+
+    @PostMapping("/{id}/approve")
+    @PreAuthorize("hasRole('APPROVING_MANAGER')")
+    public ResponseEntity<AdvanceRequest> approveAdvanceRequest(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User manager) {
+        return ResponseEntity.ok(advanceService.approveAdvanceRequest(id, manager));
+    }
+
+    @PostMapping("/{id}/disburse")
+    @PreAuthorize("hasRole('FINANCE_EXECUTIVE')")
+    public ResponseEntity<AdvanceRequest> disburseAdvanceRequest(@PathVariable Long id) {
+        return ResponseEntity.ok(advanceService.disburseAdvanceRequest(id));
+    }
+
+    @PostMapping("/{id}/settle")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'FINANCE_EXECUTIVE')")
+    public ResponseEntity<AdvanceRequest> settleAdvanceRequest(
+            @PathVariable Long id,
+            @RequestBody AdvanceSettlement settlement) {
+        return ResponseEntity.ok(advanceService.settleAdvanceRequest(id, settlement));
+    }
+
+    @PostMapping("/{id}/forfeit")
+    @PreAuthorize("hasRole('FINANCE_EXECUTIVE')")
+    public ResponseEntity<AdvanceRequest> forfeitAdvanceRequest(@PathVariable Long id) {
+        return ResponseEntity.ok(advanceService.forfeitAdvanceRequest(id));
+    }
+
+    @GetMapping("/my-advances")
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    public ResponseEntity<List<AdvanceRequest>> getMyAdvances(@AuthenticationPrincipal User employee) {
+        return ResponseEntity.ok(advanceService.getAdvancesByEmployee(employee.getId()));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<AdvanceRequest> getAdvanceRequest(@PathVariable Long id) {
+        return ResponseEntity.ok(advanceService.getAdvanceRequest(id));
+    }
+}
