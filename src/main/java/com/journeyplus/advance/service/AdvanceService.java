@@ -1,5 +1,13 @@
 package com.journeyplus.advance.service;
 
+import java.time.LocalDate;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.journeyplus.advance.entity.AdvanceRequest;
 import com.journeyplus.advance.entity.AdvanceSettlement;
 import com.journeyplus.advance.entity.AdvanceStatus;
@@ -8,13 +16,6 @@ import com.journeyplus.advance.repository.AdvanceSettlementRepository;
 import com.journeyplus.config.AuditAction;
 import com.journeyplus.event.StatusChangeEvent;
 import com.journeyplus.iam.entity.User;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDate;
-import java.util.List;
 
 @Service
 public class AdvanceService {
@@ -157,6 +158,6 @@ public class AdvanceService {
     }
 
     public List<AdvanceRequest> getAdvancesByEmployee(Long employeeId) {
-        return advanceRequestRepository.findByEmployeeId(employeeId);
+        return advanceRequestRepository.findByEmployee_Id(employeeId);
     }
 }

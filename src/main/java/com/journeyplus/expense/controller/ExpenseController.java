@@ -90,12 +90,46 @@ public class ExpenseController {
     }
 
     @GetMapping("/{claimId}")
-    public ResponseEntity<ExpenseClaim> getExpenseClaim(@PathVariable Long claimId) {
-        return ResponseEntity.ok(expenseService.getExpenseClaim(claimId));
+    public ResponseEntity<ExpenseClaim> getExpenseClaim(@PathVariable Long claimId, @AuthenticationPrincipal User user) {
+        ExpenseClaim claim = expenseService.getExpenseClaim(claimId);
+        if (claim == null) throw new IllegalArgumentException("Expense claim not found");
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null) {
+            for (org.springframework.security.core.GrantedAuthority a : auth.getAuthorities()) {
+                String r = a.getAuthority();
+                if (r != null && (r.endsWith("TRAVEL_ADMIN") || r.endsWith("COMPLIANCE_OFFICER") || r.endsWith("FINANCE_EXECUTIVE"))) {
+                    return ResponseEntity.ok(claim);
+                }
+            }
+        }
+        if (claim.getEmployee() != null && user != null && claim.getEmployee().getId().equals(user.getId())) {
+            return ResponseEntity.ok(claim);
+        }
+        if (claim.getTripRequest() != null && claim.getTripRequest().getApprovingManager() != null && user != null && claim.getTripRequest().getApprovingManager().getId().equals(user.getId())) {
+            return ResponseEntity.ok(claim);
+        }
+        throw new org.springframework.security.access.AccessDeniedException("You are not authorized to view this expense claim");
     }
 
     @GetMapping("/{claimId}/lines")
-    public ResponseEntity<List<ExpenseLine>> getExpenseLines(@PathVariable Long claimId) {
-        return ResponseEntity.ok(expenseService.getLinesByClaim(claimId));
+    public ResponseEntity<List<ExpenseLine>> getExpenseLines(@PathVariable Long claimId, @AuthenticationPrincipal User user) {
+        ExpenseClaim claim = expenseService.getExpenseClaim(claimId);
+        if (claim == null) throw new IllegalArgumentException("Expense claim not found");
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null) {
+            for (org.springframework.security.core.GrantedAuthority a : auth.getAuthorities()) {
+                String r = a.getAuthority();
+                if (r != null && (r.endsWith("TRAVEL_ADMIN") || r.endsWith("COMPLIANCE_OFFICER") || r.endsWith("FINANCE_EXECUTIVE"))) {
+                    return ResponseEntity.ok(expenseService.getLinesByClaim(claimId));
+                }
+            }
+        }
+        if (claim.getEmployee() != null && user != null && claim.getEmployee().getId().equals(user.getId())) {
+            return ResponseEntity.ok(expenseService.getLinesByClaim(claimId));
+        }
+        if (claim.getTripRequest() != null && claim.getTripRequest().getApprovingManager() != null && user != null && claim.getTripRequest().getApprovingManager().getId().equals(user.getId())) {
+            return ResponseEntity.ok(expenseService.getLinesByClaim(claimId));
+        }
+        throw new org.springframework.security.access.AccessDeniedException("You are not authorized to view expense lines");
     }
 }

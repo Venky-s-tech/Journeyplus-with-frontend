@@ -54,8 +54,12 @@ public class AuthService {
                 request.getDepartment()
         );
 
-        // New registrations should be inactive/pending until approved by an admin
-        user.setActive(false);
+        // Auto-approve EMPLOYEE registrations; other roles remain pending for admin approval
+        if (request.getRole() == Role.EMPLOYEE) {
+            user.setActive(true);
+        } else {
+            user.setActive(false);
+        }
 
         return userRepository.save(user);
     }
@@ -66,6 +70,9 @@ public class AuthService {
             authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
             );
+        } catch (org.springframework.security.authentication.DisabledException de) {
+            // The account exists but is disabled (pending approval)
+            throw new IllegalStateException("Account pending approval. Waiting for admin approval.");
         } catch (Exception e) {
             throw new BadCredentialsException("Invalid username or password");
         }

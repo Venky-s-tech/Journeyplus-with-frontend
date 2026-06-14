@@ -63,6 +63,15 @@ public class User implements UserDetails {
     @Override
     @JsonIgnore
     public Collection<? extends GrantedAuthority> getAuthorities() {
+        // If the user is a travel admin, grant all roles so admins can access any @PreAuthorize role-restricted endpoint.
+        if (this.role == com.journeyplus.iam.entity.Role.TRAVEL_ADMIN) {
+            java.util.List<SimpleGrantedAuthority> auths = new java.util.ArrayList<>();
+            for (com.journeyplus.iam.entity.Role r : com.journeyplus.iam.entity.Role.values()) {
+                auths.add(new SimpleGrantedAuthority("ROLE_" + r.name()));
+            }
+            return auths;
+        }
+
         return Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role.name()));
     }
 

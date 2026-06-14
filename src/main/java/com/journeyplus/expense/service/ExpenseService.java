@@ -1,5 +1,15 @@
 package com.journeyplus.expense.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.journeyplus.compliance.service.PolicyComplianceEngine;
 import com.journeyplus.config.AuditAction;
 import com.journeyplus.event.StatusChangeEvent;
@@ -11,15 +21,6 @@ import com.journeyplus.expense.repository.ExpenseClaimRepository;
 import com.journeyplus.expense.repository.ExpenseLineRepository;
 import com.journeyplus.expense.repository.ReimbursementRepository;
 import com.journeyplus.iam.entity.User;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDate;
-import java.util.List;
 
 @Service
 public class ExpenseService {
@@ -71,18 +72,37 @@ public class ExpenseService {
             throw new IllegalStateException("Can only add expense lines to DRAFT claims");
         }
 
+        // Defensive: do not trust client-supplied identifiers or compliance fields
+        line.setId(null);
+        // Always associate the persisted claim using path variable
+        line.setExpenseClaim(claim);
+        // Ensure a non-null policy compliance status before persisting to avoid DB NOT NULL constraint
+        if (line.getPolicyComplianceStatus() == null) {
+            line.setPolicyComplianceStatus("COMPLIANT");
+        }
+        // Clear any client-supplied compliance remarks; compliance engine will set them as needed
+        line.setComplianceRemarks(null);
+
+        // Validate amount and currency
+        if (line.getAmount() == null) throw new IllegalArgumentException("Expense line amount is required");
+        if (line.getOriginalCurrency() == null) line.setOriginalCurrency(claim.getOriginalCurrency());
+
         // Multi-currency calculation
         BigDecimal rate = getExchangeRateToUsd(line.getOriginalCurrency());
         BigDecimal usdEquivalent = line.getAmount().multiply(rate).setScale(2, RoundingMode.HALF_UP);
         line.setUsdEquivalent(usdEquivalent);
-        line.setExpenseClaim(claim);
 
-        // Auto-run Compliance check before saving
-        complianceEngine.runComplianceCheck(line);
-
+        // 1) Persist ExpenseLine first so subsequent ComplianceAudit/PolicyException can reference its DB id
         ExpenseLine savedLine = expenseLineRepository.save(line);
 
-        // Update total claim sums
+        // 2) Run policy compliance checks (this will create ComplianceAudit and PolicyException records as needed)
+        // The compliance engine expects an ExpenseLine with an expense claim and usdEquivalent set
+        complianceEngine.runComplianceCheck(savedLine);
+
+        // 3) Persist any changes made by the compliance engine (policyComplianceStatus, complianceRemarks)
+        savedLine = expenseLineRepository.save(savedLine);
+
+        // 4) Update total claim sums after the line has been recorded
         BigDecimal originalTotal = claim.getTotalAmount().add(line.getAmount());
         BigDecimal usdTotal = claim.getUsdEquivalent().add(usdEquivalent);
         claim.setTotalAmount(originalTotal);
@@ -185,10 +205,10 @@ public class ExpenseService {
     }
 
     public List<ExpenseClaim> getClaimsByEmployee(Long employeeId) {
-        return expenseClaimRepository.findByEmployeeId(employeeId);
+        return expenseClaimRepository.findByEmployee_Id(employeeId);
     }
 
     public List<ExpenseLine> getLinesByClaim(Long claimId) {
-        return expenseLineRepository.findByExpenseClaimId(claimId);
+        return expenseLineRepository.findByExpenseClaim_Id(claimId);
     }
 }

@@ -1,12 +1,13 @@
 package com.journeyplus.trip.repository;
 
-import com.journeyplus.trip.entity.VisaRequirement;
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import com.journeyplus.trip.entity.VisaRequirement;
 
 @Repository
 public interface VisaRequirementRepository extends JpaRepository<VisaRequirement, Long> {
-    List<VisaRequirement> findByTripRequestId(Long tripRequestId);
+    List<VisaRequirement> findByTripRequest_Id(Long tripRequestId);
 }

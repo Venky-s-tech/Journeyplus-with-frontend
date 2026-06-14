@@ -24,8 +24,20 @@ public class AuthController {
     private AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<Object> register(@Valid @RequestBody RegisterRequest request) {
         User user = authService.register(request);
+        // For any role other than EMPLOYEE, always return 'waiting for admin approval'
+        if (request.getRole() != null && request.getRole() != com.journeyplus.iam.entity.Role.EMPLOYEE) {
+            return ResponseEntity.status(202).body(
+                    java.util.Map.of(
+                            "message", "Registration received — waiting for admin approval",
+                            "username", user.getUsername(),
+                            "role", request.getRole().name()
+                    )
+            );
+        }
+
+        // Default: return created user for auto-approved roles (EMPLOYEE)
         return ResponseEntity.ok(user);
     }
 

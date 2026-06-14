@@ -1,12 +1,13 @@
 package com.journeyplus.trip.repository;
 
-import com.journeyplus.trip.entity.ItineraryLeg;
+import java.util.List;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.List;
+import com.journeyplus.trip.entity.ItineraryLeg;
 
 @Repository
 public interface ItineraryLegRepository extends JpaRepository<ItineraryLeg, Long> {
-    List<ItineraryLeg> findByTripRequestId(Long tripRequestId);
+    List<ItineraryLeg> findByTripRequest_Id(Long tripRequestId);
 }

@@ -9,6 +9,7 @@ public class TripRequestInput {
     private LocalDate startDate;
     private LocalDate endDate;
     private String comments;
+    private String approvingManagerUsername;
 
     public String getPurpose() {
         return purpose;
@@ -48,5 +49,13 @@ public class TripRequestInput {
 
     public void setComments(String comments) {
         this.comments = comments;
+    }
+
+    public String getApprovingManagerUsername() {
+        return approvingManagerUsername;
+    }
+
+    public void setApprovingManagerUsername(String approvingManagerUsername) {
+        this.approvingManagerUsername = approvingManagerUsername;
     }
 }

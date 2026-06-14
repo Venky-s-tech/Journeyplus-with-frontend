@@ -32,16 +32,29 @@ public class NotificationController {
 
     @PostMapping("/{id}/read")
     @Transactional
-    public ResponseEntity<Void> markAsRead(@PathVariable Long id, @AuthenticationPrincipal User user) {
+    public ResponseEntity<java.util.Map<String, Object>> markAsRead(@PathVariable Long id, @AuthenticationPrincipal User user) {
         Notification notification = notificationRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Notification not found"));
-        
+
         if (!notification.getUser().getId().equals(user.getId())) {
-            throw new IllegalArgumentException("Unauthorized to read this notification");
+            throw new org.springframework.security.access.AccessDeniedException("You are not authorized to mark this notification as read");
         }
 
         notification.setRead(true);
         notificationRepository.save(notification);
-        return ResponseEntity.ok().build();
+
+        java.util.Map<String, Object> body = java.util.Map.of(
+            "status", "Notification marked as read",
+            "notification", java.util.Map.of(
+                "id", notification.getId(),
+                "title", notification.getTitle(),
+                "message", notification.getMessage(),
+                "read", notification.isRead()
+            )
+        );
+
+        return ResponseEntity.ok(body);
     }
 }
+
+

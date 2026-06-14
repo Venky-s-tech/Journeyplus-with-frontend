@@ -8,6 +8,6 @@ import java.util.List;
 
 @Repository
 public interface TripRequestRepository extends JpaRepository<TripRequest, Long> {
-    List<TripRequest> findByEmployeeId(Long employeeId);
-    List<TripRequest> findByApprovingManagerId(Long managerId);
+    List<TripRequest> findByEmployee_Id(Long employeeId);
+    List<TripRequest> findByApprovingManager_Id(Long managerId);
 }

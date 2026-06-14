@@ -76,7 +76,25 @@ public class AdvanceController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<AdvanceRequest> getAdvanceRequest(@PathVariable Long id) {
-        return ResponseEntity.ok(advanceService.getAdvanceRequest(id));
+    public ResponseEntity<AdvanceRequest> getAdvanceRequest(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        AdvanceRequest ar = advanceService.getAdvanceRequest(id);
+        if (ar == null) throw new IllegalArgumentException("Advance request not found");
+        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null) {
+            for (org.springframework.security.core.GrantedAuthority a : auth.getAuthorities()) {
+                String r = a.getAuthority();
+                if (r != null && (r.endsWith("TRAVEL_ADMIN") || r.endsWith("COMPLIANCE_OFFICER") || r.endsWith("FINANCE_EXECUTIVE"))) {
+                    return ResponseEntity.ok(ar);
+                }
+            }
+        }
+        if (ar.getEmployee() != null && user != null && ar.getEmployee().getId().equals(user.getId())) {
+            return ResponseEntity.ok(ar);
+        }
+        // allow approving manager if trip's approving manager matches
+        if (ar.getTripRequest() != null && ar.getTripRequest().getApprovingManager() != null && user != null && ar.getTripRequest().getApprovingManager().getId().equals(user.getId())) {
+            return ResponseEntity.ok(ar);
+        }
+        throw new org.springframework.security.access.AccessDeniedException("You are not authorized to view this advance");
     }
 }

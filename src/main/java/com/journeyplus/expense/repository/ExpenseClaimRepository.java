@@ -8,6 +8,7 @@ import java.util.List;
 
 @Repository
 public interface ExpenseClaimRepository extends JpaRepository<ExpenseClaim, Long> {
-    List<ExpenseClaim> findByEmployeeId(Long employeeId);
-    List<ExpenseClaim> findByTripRequestId(Long tripRequestId);
+    // Use nested property path to navigate the relation: employee.id and tripRequest.id
+    List<ExpenseClaim> findByEmployee_Id(Long employeeId);
+    List<ExpenseClaim> findByTripRequest_Id(Long tripRequestId);
 }

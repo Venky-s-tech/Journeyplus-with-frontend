@@ -1,8 +1,18 @@
 package com.journeyplus.trip.service;
 
+import java.util.List;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.journeyplus.config.AuditAction;
 import com.journeyplus.event.StatusChangeEvent;
 import com.journeyplus.iam.entity.User;
+import com.journeyplus.trip.dto.VisaRequest;
 import com.journeyplus.trip.entity.ItineraryLeg;
 import com.journeyplus.trip.entity.TripRequest;
 import com.journeyplus.trip.entity.TripStatus;
@@ -10,14 +20,6 @@ import com.journeyplus.trip.entity.VisaRequirement;
 import com.journeyplus.trip.repository.ItineraryLegRepository;
 import com.journeyplus.trip.repository.TripRequestRepository;
 import com.journeyplus.trip.repository.VisaRequirementRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 public class TripService {
@@ -80,20 +82,32 @@ public class TripService {
         trip.setStatus(TripStatus.SUBMITTED);
         TripRequest saved = tripRequestRepository.save(trip);
 
-        // Publish event for status change notification
-        if (trip.getApprovingManager() != null) {
-            eventPublisher.publishEvent(new StatusChangeEvent(
-                    trip.getApprovingManager().getId(),
-                    "New Trip Request Submitted",
-                    "A trip request has been submitted by " + trip.getEmployee().getUsername() + " and requires your review."
-            ));
+        // Publish event for status change notification using persisted entity (saved)
+        try {
+            if (saved.getApprovingManager() != null) {
+                Long mgrId = saved.getApprovingManager().getId();
+                log.info("Publishing submission event for manager id={} tripId={}", mgrId, saved.getId());
+                eventPublisher.publishEvent(new StatusChangeEvent(
+                        mgrId,
+                        "New Trip Request Submitted",
+                        "A trip request has been submitted by " + saved.getEmployee().getUsername() + " and requires your review."
+                ));
+            } else {
+                log.info("No approving manager set for tripId={}", saved.getId());
+            }
+        } catch (Exception e) {
+            log.error("Error while publishing manager notification for tripId={}: {}", saved.getId(), e.getMessage());
         }
 
-        eventPublisher.publishEvent(new StatusChangeEvent(
-                trip.getEmployee().getId(),
-                "Trip Request Submitted",
-                "Your trip request to " + trip.getDestination() + " has been successfully submitted."
-        ));
+        try {
+            eventPublisher.publishEvent(new StatusChangeEvent(
+                    saved.getEmployee().getId(),
+                    "Trip Request Submitted",
+                    "Your trip request to " + saved.getDestination() + " has been successfully submitted."
+            ));
+        } catch (Exception e) {
+            log.error("Error while publishing employee notification for tripId={}: {}", saved.getId(), e.getMessage());
+        }
 
         return saved;
     }
@@ -163,11 +177,26 @@ public class TripService {
                 .orElseThrow(() -> new IllegalArgumentException("Trip request not found"));
     }
 
+    @Transactional
+    @AuditAction(module = "TRIP", action = "UPDATE_VISA")
+    public VisaRequirement updateVisaRequirement(Long tripId, Long visaId, VisaRequest visaRequest) {
+        VisaRequirement v = visaRequirementRepository.findById(visaId)
+                .orElseThrow(() -> new IllegalArgumentException("Visa requirement not found"));
+        if (v.getTripRequest() == null || !v.getTripRequest().getId().equals(tripId)) {
+            throw new IllegalArgumentException("Visa requirement does not belong to the specified trip");
+        }
+        if (visaRequest.getDestinationCountry() != null) v.setDestinationCountry(visaRequest.getDestinationCountry());
+        if (visaRequest.getStatus() != null) v.setStatus(visaRequest.getStatus().getValue());
+        if (visaRequest.getNotes() != null) v.setNotes(visaRequest.getNotes());
+        if (visaRequest.getRequiresVisa() != null) v.setRequiresVisa(visaRequest.getRequiresVisa());
+        return visaRequirementRepository.save(v);
+    }
+
     public List<TripRequest> getTripsByEmployee(Long employeeId) {
-        return tripRequestRepository.findByEmployeeId(employeeId);
+        return tripRequestRepository.findByEmployee_Id(employeeId);
     }
 
     public List<TripRequest> getTripsForManager(Long managerId) {
-        return tripRequestRepository.findByApprovingManagerId(managerId);
+        return tripRequestRepository.findByApprovingManager_Id(managerId);
     }
 }

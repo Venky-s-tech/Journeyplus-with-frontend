@@ -45,6 +45,7 @@ public class PolicyController {
     }
 
     @GetMapping("/role/{role}")
+    @PreAuthorize("hasAnyRole('TRAVEL_ADMIN','COMPLIANCE_OFFICER','APPROVING_MANAGER')")
     public ResponseEntity<TravelPolicy> getPolicyByRole(@PathVariable Role role) {
         return ResponseEntity.ok(policyService.getPolicyByRole(role));
     }

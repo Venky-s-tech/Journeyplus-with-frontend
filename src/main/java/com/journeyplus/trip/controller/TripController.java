@@ -12,28 +12,39 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 import com.journeyplus.iam.entity.User;
+import com.journeyplus.iam.repository.UserRepository;
 import com.journeyplus.trip.dto.ItineraryLegInput;
+import com.journeyplus.trip.dto.ItineraryLegResponse;
 import com.journeyplus.trip.dto.SimpleUserDTO;
 import com.journeyplus.trip.dto.TripCreationRequest;
 import com.journeyplus.trip.dto.TripRequestInput;
 import com.journeyplus.trip.dto.TripResponse;
 import com.journeyplus.trip.dto.VisaRequirementInput;
+import com.journeyplus.trip.dto.VisaRequirementResponse;
 import com.journeyplus.trip.entity.TripRequest;
 import com.journeyplus.trip.entity.TripStatus;
 import com.journeyplus.trip.service.TripService;
 
 
-@RestController
-@RequestMapping("/api/trips")
+// Disabled: Split into TripRequestController and ItineraryController
+// @RestController
+// @RequestMapping("/api/trips")
 public class TripController {
 
     @Autowired
     private TripService tripService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private com.journeyplus.trip.repository.ItineraryLegRepository itineraryLegRepository;
+
+    @Autowired
+    private com.journeyplus.trip.repository.VisaRequirementRepository visaRequirementRepository;
 
     @PostMapping
     @PreAuthorize("hasRole('EMPLOYEE')")
@@ -50,6 +61,11 @@ public class TripController {
             tripEntity.setStartDate(r.getStartDate());
             tripEntity.setEndDate(r.getEndDate());
             tripEntity.setComments(r.getComments());
+            if (r.getApprovingManagerUsername() != null && !r.getApprovingManagerUsername().isBlank()) {
+                User mgr = userRepository.findByUsername(r.getApprovingManagerUsername())
+                        .orElseThrow(() -> new IllegalArgumentException("Approving manager not found: " + r.getApprovingManagerUsername()));
+                tripEntity.setApprovingManager(mgr);
+            }
         }
 
         // Map legs
@@ -142,8 +158,10 @@ public class TripController {
 
     @GetMapping("/pending-approvals")
     @PreAuthorize("hasRole('APPROVING_MANAGER')")
-    public ResponseEntity<List<TripRequest>> getPendingApprovals(@AuthenticationPrincipal User manager) {
-        return ResponseEntity.ok(tripService.getTripsForManager(manager.getId()));
+    public ResponseEntity<List<TripResponse>> getPendingApprovals(@AuthenticationPrincipal User manager) {
+        List<TripRequest> trips = tripService.getTripsForManager(manager.getId());
+        List<TripResponse> dto = trips.stream().map(this::toTripResponse).collect(Collectors.toList());
+        return ResponseEntity.ok(dto);
     }
 
     @GetMapping("/{id}")
@@ -203,5 +221,86 @@ public class TripController {
         // legs and visas are not stored as collections on TripRequest entity in this model,
         // so we omit them here to avoid lazy-init problems. They can be fetched separately if needed.
         return r;
+    }
+
+    private ItineraryLegResponse toLegResponse(com.journeyplus.trip.entity.ItineraryLeg leg) {
+        if (leg == null) return null;
+        ItineraryLegResponse r = new ItineraryLegResponse();
+        r.setId(leg.getId());
+        r.setDepartureCity(leg.getDepartureCity());
+        r.setArrivalCity(leg.getArrivalCity());
+        r.setTravelMode(leg.getTravelMode());
+        r.setTravelDate(leg.getTravelDate());
+        r.setEstimatedCost(leg.getEstimatedCost());
+        r.setOriginalCurrency(leg.getOriginalCurrency());
+        r.setUsdEquivalent(leg.getUsdEquivalent());
+        r.setCarrierDetails(leg.getCarrierDetails());
+        r.setBookingReference(leg.getBookingReference());
+        r.setBookingStatus(leg.getBookingStatus());
+        return r;
+    }
+
+    private VisaRequirementResponse toVisaResponse(com.journeyplus.trip.entity.VisaRequirement v) {
+        if (v == null) return null;
+        VisaRequirementResponse r = new VisaRequirementResponse();
+        r.setId(v.getId());
+        r.setDestinationCountry(v.getDestinationCountry());
+        r.setRequiresVisa(v.isRequiresVisa());
+        r.setStatus(v.getStatus());
+        r.setNotes(v.getNotes());
+        return r;
+    }
+
+    @GetMapping("/{id}/legs")
+    public ResponseEntity<java.util.List<ItineraryLegResponse>> getLegs(@PathVariable Long id) {
+        java.util.List<com.journeyplus.trip.entity.ItineraryLeg> legs = itineraryLegRepository.findByTripRequest_Id(id);
+        java.util.List<ItineraryLegResponse> dto = legs.stream().map(this::toLegResponse).collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(dto);
+    }
+
+    @GetMapping("/{id}/visas")
+    public ResponseEntity<java.util.List<VisaRequirementResponse>> getVisas(@PathVariable Long id) {
+        java.util.List<com.journeyplus.trip.entity.VisaRequirement> visas = visaRequirementRepository.findByTripRequest_Id(id);
+        java.util.List<VisaRequirementResponse> dto = visas.stream().map(this::toVisaResponse).collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(dto);
+    }
+
+    @PostMapping("/{tripId}/legs/{legId}/book")
+    @PreAuthorize("hasRole('TRAVEL_DESK_COORDINATOR')")
+    public ResponseEntity<ItineraryLegResponse> bookLeg(
+            @PathVariable Long tripId,
+            @PathVariable Long legId,
+            @jakarta.validation.Valid @org.springframework.web.bind.annotation.RequestBody com.journeyplus.trip.dto.BookingRequest bookingRequest
+    ) {
+        com.journeyplus.trip.entity.ItineraryLeg leg = itineraryLegRepository.findById(legId)
+                .orElseThrow(() -> new IllegalArgumentException("Leg not found"));
+        if (leg.getTripRequest() == null || !leg.getTripRequest().getId().equals(tripId)) {
+            throw new IllegalArgumentException("Leg does not belong to the specified trip");
+        }
+        String bookingRef = bookingRequest.getBookingReference();
+        String bookingStatus = bookingRequest.getBookingStatus() != null ? bookingRequest.getBookingStatus() : "BOOKED";
+        if (bookingRef != null) leg.setBookingReference(bookingRef);
+        if (bookingStatus != null) leg.setBookingStatus(bookingStatus);
+        itineraryLegRepository.save(leg);
+        return ResponseEntity.ok(toLegResponse(leg));
+    }
+
+    @PostMapping("/{tripId}/visas/{visaId}")
+    @PreAuthorize("hasRole('TRAVEL_DESK_COORDINATOR')")
+    public ResponseEntity<VisaRequirementResponse> updateVisa(
+            @PathVariable Long tripId,
+            @PathVariable Long visaId,
+            @RequestBody java.util.Map<String, Object> payload
+    ) {
+        com.journeyplus.trip.entity.VisaRequirement v = visaRequirementRepository.findById(visaId)
+                .orElseThrow(() -> new IllegalArgumentException("Visa requirement not found"));
+        if (v.getTripRequest() == null || !v.getTripRequest().getId().equals(tripId)) {
+            throw new IllegalArgumentException("Visa requirement does not belong to the specified trip");
+        }
+        if (payload.containsKey("status")) v.setStatus(String.valueOf(payload.get("status")));
+        if (payload.containsKey("notes")) v.setNotes(String.valueOf(payload.get("notes")));
+        if (payload.containsKey("requiresVisa")) v.setRequiresVisa(Boolean.parseBoolean(String.valueOf(payload.get("requiresVisa"))));
+        visaRequirementRepository.save(v);
+        return ResponseEntity.ok(toVisaResponse(v));
     }
 }

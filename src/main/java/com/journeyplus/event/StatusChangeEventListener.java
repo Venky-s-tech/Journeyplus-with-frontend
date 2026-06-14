@@ -22,10 +22,19 @@ public class StatusChangeEventListener {
     @EventListener
     @Transactional
     public void handleStatusChangeEvent(StatusChangeEvent event) {
-        User user = userRepository.findById(event.getUserId())
-                .orElseThrow(() -> new IllegalArgumentException("User not found for notification: " + event.getUserId()));
+        try {
+            Long userId = event.getUserId();
+            org.slf4j.LoggerFactory.getLogger(StatusChangeEventListener.class)
+                .info("Received StatusChangeEvent for userId={} title={}", userId, event.getTitle());
 
-        Notification notification = new Notification(user, event.getTitle(), event.getMessage());
-        notificationRepository.save(notification);
+            User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found for notification: " + userId));
+
+            Notification notification = new Notification(user, event.getTitle(), event.getMessage());
+            notificationRepository.save(notification);
+        } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(StatusChangeEventListener.class)
+                .error("Failed to handle StatusChangeEvent: {}", e.getMessage());
+        }
     }
 }

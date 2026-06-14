@@ -1,12 +1,13 @@
 package com.journeyplus.expense.repository;
 
-import com.journeyplus.expense.entity.Reimbursement;
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.Optional;
+import com.journeyplus.expense.entity.Reimbursement;
 
 @Repository
 public interface ReimbursementRepository extends JpaRepository<Reimbursement, Long> {
-    Optional<Reimbursement> findByExpenseClaimId(Long expenseClaimId);
+    Optional<Reimbursement> findByExpenseClaim_Id(Long expenseClaimId);
 }

@@ -1,9 +1,22 @@
 package com.journeyplus.expense.entity;
 
-import com.journeyplus.common.EncryptedBigDecimalConverter;
-import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.journeyplus.common.EncryptedBigDecimalConverter;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 @Entity
 @Table(name = "expense_lines")
@@ -11,10 +24,12 @@ public class ExpenseLine {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "expense_claim_id", nullable = false)
+    @JsonIgnore
     private ExpenseClaim expenseClaim;
 
     @Column(name = "expense_date", nullable = false)

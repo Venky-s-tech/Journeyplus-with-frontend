@@ -1,10 +1,11 @@
 package com.journeyplus.advance.repository;
 
-import com.journeyplus.advance.entity.AdvanceSettlement;
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
-import java.util.Optional;
+import com.journeyplus.advance.entity.AdvanceSettlement;
 
 @Repository
 public interface AdvanceSettlementRepository extends JpaRepository<AdvanceSettlement, Long> {
