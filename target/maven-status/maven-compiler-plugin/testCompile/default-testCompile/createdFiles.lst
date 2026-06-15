@@ -1,2 +1,1 @@
-com\journeyplus\integration\DocumentIntegrationTest.class
-com\journeyplus\JourneyPlusApplicationTests.class
+com\journeyplus\policy\service\PolicyServiceTest.class
