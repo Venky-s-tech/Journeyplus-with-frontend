@@ -2,7 +2,6 @@ package com.journeyplus.config;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.SignatureAlgorithm;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -14,6 +13,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
+
+import com.journeyplus.iam.entity.User;
 
 @Component
 public class JwtTokenProvider {
@@ -32,11 +33,23 @@ public class JwtTokenProvider {
 
     public String generateAccessToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
+        if (userDetails instanceof User) {
+            User user = (User) userDetails;
+            claims.put("userId", user.getId());
+            claims.put("role", user.getRole().name());
+            claims.put("gradeId", user.getGrade() != null ? user.getGrade().getId() : null);
+        }
         return createToken(claims, userDetails.getUsername(), accessExpirationMs);
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();
+        if (userDetails instanceof User) {
+            User user = (User) userDetails;
+            claims.put("userId", user.getId());
+            claims.put("role", user.getRole().name());
+            claims.put("gradeId", user.getGrade() != null ? user.getGrade().getId() : null);
+        }
         return createToken(claims, userDetails.getUsername(), refreshExpirationMs);
     }
 

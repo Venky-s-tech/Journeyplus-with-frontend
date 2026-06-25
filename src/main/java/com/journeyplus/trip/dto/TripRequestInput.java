@@ -1,15 +1,38 @@
 package com.journeyplus.trip.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 
 public class TripRequestInput {
 
+    @NotBlank(message = "Purpose is required")
     private String purpose;
+
+    @NotBlank(message = "Destination is required")
     private String destination;
-    private LocalDate startDate;
-    private LocalDate endDate;
+
+    @NotNull(message = "Departure date is required")
+    @JsonAlias("startDate")
+    private LocalDate departureDate;
+
+    @NotNull(message = "Return date is required")
+    @JsonAlias("endDate")
+    private LocalDate returnDate;
+
+    @NotBlank(message = "Travel type is required")
+    private String travelType; // DOMESTIC / INTERNATIONAL
+
+    @DecimalMin(value = "0.01", message = "Estimated cost must be positive")
+    private BigDecimal estimatedCost;
+
     private String comments;
-    private String approvingManagerUsername;
+
+    @JsonAlias("approvingManagerUsername")
+    private String approverUsername;
 
     public String getPurpose() {
         return purpose;
@@ -27,20 +50,36 @@ public class TripRequestInput {
         this.destination = destination;
     }
 
-    public LocalDate getStartDate() {
-        return startDate;
+    public LocalDate getDepartureDate() {
+        return departureDate;
     }
 
-    public void setStartDate(LocalDate startDate) {
-        this.startDate = startDate;
+    public void setDepartureDate(LocalDate departureDate) {
+        this.departureDate = departureDate;
     }
 
-    public LocalDate getEndDate() {
-        return endDate;
+    public LocalDate getReturnDate() {
+        return returnDate;
     }
 
-    public void setEndDate(LocalDate endDate) {
-        this.endDate = endDate;
+    public void setReturnDate(LocalDate returnDate) {
+        this.returnDate = returnDate;
+    }
+
+    public String getTravelType() {
+        return travelType;
+    }
+
+    public void setTravelType(String travelType) {
+        this.travelType = travelType;
+    }
+
+    public BigDecimal getEstimatedCost() {
+        return estimatedCost;
+    }
+
+    public void setEstimatedCost(BigDecimal estimatedCost) {
+        this.estimatedCost = estimatedCost;
     }
 
     public String getComments() {
@@ -51,11 +90,42 @@ public class TripRequestInput {
         this.comments = comments;
     }
 
-    public String getApprovingManagerUsername() {
-        return approvingManagerUsername;
+    public String getApproverUsername() {
+        return approverUsername;
     }
 
+    public void setApproverUsername(String approverUsername) {
+        this.approverUsername = approverUsername;
+    }
+
+    // Deprecated getters/setters for backward compatibility
+    @Deprecated
+    public LocalDate getStartDate() {
+        return departureDate;
+    }
+
+    @Deprecated
+    public void setStartDate(LocalDate startDate) {
+        this.departureDate = startDate;
+    }
+
+    @Deprecated
+    public LocalDate getEndDate() {
+        return returnDate;
+    }
+
+    @Deprecated
+    public void setEndDate(LocalDate endDate) {
+        this.returnDate = endDate;
+    }
+
+    @Deprecated
+    public String getApprovingManagerUsername() {
+        return approverUsername;
+    }
+
+    @Deprecated
     public void setApprovingManagerUsername(String approvingManagerUsername) {
-        this.approvingManagerUsername = approvingManagerUsername;
+        this.approverUsername = approvingManagerUsername;
     }
 }

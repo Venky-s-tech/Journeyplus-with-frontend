@@ -18,7 +18,7 @@ import com.journeyplus.iam.repository.UserRepository;
 
 @RestController
 @RequestMapping("/api/admin")
-@PreAuthorize("hasRole('TRAVEL_ADMIN')")
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminUserApprovalController {
 
     @Autowired

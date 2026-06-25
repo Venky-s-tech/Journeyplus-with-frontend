@@ -17,7 +17,7 @@ public class ComplianceController {
     private PolicyExceptionRepository policyExceptionRepository;
 
     @GetMapping("/exceptions")
-    @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER','FINANCE_EXECUTIVE','TRAVEL_ADMIN')")
+    @PreAuthorize("hasAnyRole('COMPLIANCE','FINANCE','ADMIN')")
     public ResponseEntity<List<PolicyException>> listExceptions(@RequestParam(required = false) String status) {
         if (status == null) {
             return ResponseEntity.ok(policyExceptionRepository.findAll());
@@ -26,7 +26,7 @@ public class ComplianceController {
     }
 
     @PostMapping("/exceptions/{id}/resolve")
-    @PreAuthorize("hasAnyRole('COMPLIANCE_OFFICER','APPROVING_MANAGER')")
+    @PreAuthorize("hasAnyRole('COMPLIANCE','APPROVING_MANAGER')")
     public ResponseEntity<PolicyException> resolveException(
             @PathVariable Long id,
             @RequestParam String action,

@@ -2,15 +2,15 @@ package com.journeyplus.trip.dto;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
-
 import io.swagger.v3.oas.annotations.media.Schema;
 
 @Schema(description = "Visa status enumeration (mapped to DB values)")
 public enum VisaStatus {
+    NOT_REQUIRED("NOT_REQUIRED"),
     PENDING("PENDING"),
     APPLIED("APPLIED"),
-    APPROVED("APPROVED"),
-    EXEMPTED("EXEMPTED");
+    GRANTED("GRANTED"),
+    REJECTED("REJECTED");
 
     private final String value;
 
@@ -32,21 +32,16 @@ public enum VisaStatus {
                 return s;
             }
         }
-        // Accept some common synonyms for backward compatibility
-        switch (v.toLowerCase()) {
-            case "notrequired":
-            case "not_required":
-            case "exempt":
-            case "exempted":
-                return EXEMPTED;
-            case "granted":
-            case "approved":
-                return APPROVED;
-            case "rejected":
-                // map rejected to applied? better to throw - but we map to PENDING as fallback
-                throw new IllegalArgumentException("Unsupported status: " + value + ". Allowed: PENDING, APPLIED, APPROVED, EXEMPTED");
+        // Synonyms for backward compatibility
+        switch (v.toUpperCase()) {
+            case "NOTREQUIRED":
+            case "EXEMPT":
+            case "EXEMPTED":
+                return NOT_REQUIRED;
+            case "APPROVED":
+                return GRANTED;
             default:
-                throw new IllegalArgumentException("Unknown VisaStatus: " + value + ". Allowed: PENDING, APPLIED, APPROVED, EXEMPTED");
+                throw new IllegalArgumentException("Unknown VisaStatus: " + value + ". Allowed: NOT_REQUIRED, PENDING, APPLIED, GRANTED, REJECTED");
         }
     }
 }

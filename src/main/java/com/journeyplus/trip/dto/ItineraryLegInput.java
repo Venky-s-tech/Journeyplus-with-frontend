@@ -1,42 +1,68 @@
 package com.journeyplus.trip.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.journeyplus.trip.entity.LegType;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public class ItineraryLegInput {
 
-    private String departureCity;
-    private String arrivalCity;
-    private String travelMode;
+    @NotBlank(message = "Origin is required")
+    @JsonAlias("departureCity")
+    private String origin;
+
+    @NotBlank(message = "Destination is required")
+    @JsonAlias("arrivalCity")
+    private String destination;
+
+    @NotNull(message = "Leg type is required")
+    @JsonAlias("travelMode")
+    private LegType legType;
+
+    @NotNull(message = "Travel date is required")
     private LocalDate travelDate;
-    private BigDecimal estimatedCost;
+
+    private LocalDateTime departureDateTime;
+    private LocalDateTime arrivalDateTime;
+    private String carrierDetails;
+
+    @JsonAlias("bookingReference")
+    private String bookingRef;
+
+    @NotNull(message = "Cost is required")
+    @DecimalMin(value = "0.01", message = "Cost must be positive")
+    @JsonAlias("estimatedCost")
+    private BigDecimal cost;
+
     private String originalCurrency;
     private BigDecimal usdEquivalent;
-    private String carrierDetails;
-    private String bookingReference;
 
-    public String getDepartureCity() {
-        return departureCity;
+    public String getOrigin() {
+        return origin;
     }
 
-    public void setDepartureCity(String departureCity) {
-        this.departureCity = departureCity;
+    public void setOrigin(String origin) {
+        this.origin = origin;
     }
 
-    public String getArrivalCity() {
-        return arrivalCity;
+    public String getDestination() {
+        return destination;
     }
 
-    public void setArrivalCity(String arrivalCity) {
-        this.arrivalCity = arrivalCity;
+    public void setDestination(String destination) {
+        this.destination = destination;
     }
 
-    public String getTravelMode() {
-        return travelMode;
+    public LegType getLegType() {
+        return legType;
     }
 
-    public void setTravelMode(String travelMode) {
-        this.travelMode = travelMode;
+    public void setLegType(LegType legType) {
+        this.legType = legType;
     }
 
     public LocalDate getTravelDate() {
@@ -47,12 +73,44 @@ public class ItineraryLegInput {
         this.travelDate = travelDate;
     }
 
-    public BigDecimal getEstimatedCost() {
-        return estimatedCost;
+    public LocalDateTime getDepartureDateTime() {
+        return departureDateTime;
     }
 
-    public void setEstimatedCost(BigDecimal estimatedCost) {
-        this.estimatedCost = estimatedCost;
+    public void setDepartureDateTime(LocalDateTime departureDateTime) {
+        this.departureDateTime = departureDateTime;
+    }
+
+    public LocalDateTime getArrivalDateTime() {
+        return arrivalDateTime;
+    }
+
+    public void setArrivalDateTime(LocalDateTime arrivalDateTime) {
+        this.arrivalDateTime = arrivalDateTime;
+    }
+
+    public String getCarrierDetails() {
+        return carrierDetails;
+    }
+
+    public void setCarrierDetails(String carrierDetails) {
+        this.carrierDetails = carrierDetails;
+    }
+
+    public String getBookingRef() {
+        return bookingRef;
+    }
+
+    public void setBookingRef(String bookingRef) {
+        this.bookingRef = bookingRef;
+    }
+
+    public BigDecimal getCost() {
+        return cost;
+    }
+
+    public void setCost(BigDecimal cost) {
+        this.cost = cost;
     }
 
     public String getOriginalCurrency() {
@@ -71,19 +129,25 @@ public class ItineraryLegInput {
         this.usdEquivalent = usdEquivalent;
     }
 
-    public String getCarrierDetails() {
-        return carrierDetails;
-    }
-
-    public void setCarrierDetails(String carrierDetails) {
-        this.carrierDetails = carrierDetails;
-    }
-
-    public String getBookingReference() {
-        return bookingReference;
-    }
-
-    public void setBookingReference(String bookingReference) {
-        this.bookingReference = bookingReference;
-    }
+    // Deprecated getters and setters for backward compatibility
+    @Deprecated
+    public String getDepartureCity() { return origin; }
+    @Deprecated
+    public void setDepartureCity(String departureCity) { this.origin = departureCity; }
+    @Deprecated
+    public String getArrivalCity() { return destination; }
+    @Deprecated
+    public void setArrivalCity(String arrivalCity) { this.destination = arrivalCity; }
+    @Deprecated
+    public String getTravelMode() { return legType != null ? legType.name() : null; }
+    @Deprecated
+    public void setTravelMode(String travelMode) { this.legType = LegType.valueOf(travelMode.toUpperCase()); }
+    @Deprecated
+    public BigDecimal getEstimatedCost() { return cost; }
+    @Deprecated
+    public void setEstimatedCost(BigDecimal estimatedCost) { this.cost = estimatedCost; }
+    @Deprecated
+    public String getBookingReference() { return bookingRef; }
+    @Deprecated
+    public void setBookingReference(String bookingReference) { this.bookingRef = bookingReference; }
 }

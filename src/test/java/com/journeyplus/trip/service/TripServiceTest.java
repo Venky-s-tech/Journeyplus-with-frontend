@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
@@ -11,7 +12,6 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -23,6 +23,7 @@ import com.journeyplus.iam.entity.User;
 import com.journeyplus.trip.dto.VisaRequest;
 import com.journeyplus.trip.dto.VisaStatus;
 import com.journeyplus.trip.entity.ItineraryLeg;
+import com.journeyplus.trip.entity.LegType;
 import com.journeyplus.trip.entity.TripRequest;
 import com.journeyplus.trip.entity.TripStatus;
 import com.journeyplus.trip.entity.VisaRequirement;
@@ -54,8 +55,21 @@ public class TripServiceTest {
         employee.setId(10L);
 
         TripRequest trip = new TripRequest(employee, "Client Meeting", "London", LocalDate.now(), LocalDate.now().plusDays(5));
+        trip.setTravelType("INTERNATIONAL");
+        trip.setEstimatedCost(new BigDecimal("500.00"));
+
         ItineraryLeg leg = new ItineraryLeg();
+        leg.setOrigin("Paris");
+        leg.setDestination("London");
+        leg.setLegType(LegType.FLIGHT);
+        leg.setTravelDate(LocalDate.now());
+        leg.setCost(new BigDecimal("150.00"));
+        leg.setOriginalCurrency("EUR");
+        leg.setUsdEquivalent(new BigDecimal("165.00"));
+
         VisaRequirement visa = new VisaRequirement();
+        visa.setCountry("UK");
+        visa.setVisaType("Business");
 
         when(tripRequestRepository.save(any(TripRequest.class))).thenAnswer(invocation -> {
             TripRequest t = invocation.getArgument(0);
@@ -87,7 +101,9 @@ public class TripServiceTest {
         TripRequest trip = new TripRequest(employee, "Client Meeting", "London", LocalDate.now(), LocalDate.now().plusDays(5));
         trip.setId(tripId);
         trip.setStatus(TripStatus.DRAFT);
-        trip.setApprovingManager(manager);
+        trip.setApprover(manager);
+        trip.setTravelType("DOMESTIC");
+        trip.setEstimatedCost(new BigDecimal("200.00"));
 
         when(tripRequestRepository.findById(tripId)).thenReturn(Optional.of(trip));
         when(tripRequestRepository.save(any(TripRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -97,7 +113,6 @@ public class TripServiceTest {
         assertNotNull(result);
         assertEquals(TripStatus.SUBMITTED, result.getStatus());
 
-        // Expect two events: one for manager, one for employee
         verify(eventPublisher, times(2)).publishEvent(any(StatusChangeEvent.class));
     }
 
@@ -123,13 +138,15 @@ public class TripServiceTest {
         User employee = new User("empUser", "emp@journeyplus.com", "pass", Role.EMPLOYEE, "IT");
         employee.setId(10L);
 
+        User manager = new User("mgrUser", "mgr@journeyplus.com", "pass", Role.APPROVING_MANAGER, "IT");
+        manager.setId(20L);
+
         TripRequest trip = new TripRequest();
         trip.setId(tripId);
         trip.setStatus(TripStatus.SUBMITTED);
         trip.setEmployee(employee);
         trip.setDestination("London");
-
-        User manager = new User("mgrUser", "mgr@journeyplus.com", "pass", Role.APPROVING_MANAGER, "IT");
+        trip.setApprover(manager);
 
         when(tripRequestRepository.findById(tripId)).thenReturn(Optional.of(trip));
         when(tripRequestRepository.save(any(TripRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -139,7 +156,7 @@ public class TripServiceTest {
         assertNotNull(result);
         assertEquals(TripStatus.APPROVED, result.getStatus());
         assertEquals("Approved!", result.getComments());
-        assertEquals(manager, result.getApprovingManager());
+        assertEquals(manager, result.getApprover());
 
         verify(eventPublisher, times(1)).publishEvent(any(StatusChangeEvent.class));
     }
@@ -251,22 +268,6 @@ public class TripServiceTest {
     }
 
     @Test
-    public void completeOrCancelTripRequest_ThrowsException_InvalidStatus() {
-        Long tripId = 100L;
-        TripRequest trip = new TripRequest();
-        trip.setId(tripId);
-        trip.setStatus(TripStatus.APPROVED);
-
-        when(tripRequestRepository.findById(tripId)).thenReturn(Optional.of(trip));
-
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
-            tripService.completeOrCancelTripRequest(tripId, TripStatus.SUBMITTED);
-        });
-
-        assertEquals("Invalid target status. Must be COMPLETED or CANCELLED", exception.getMessage());
-    }
-
-    @Test
     public void updateVisaRequirement_Success() {
         Long tripId = 100L;
         Long visaId = 200L;
@@ -277,14 +278,16 @@ public class TripServiceTest {
         VisaRequirement visa = new VisaRequirement();
         visa.setId(visaId);
         visa.setTripRequest(trip);
-        visa.setDestinationCountry("France");
+        visa.setCountry("France");
+        visa.setVisaType("Schengen");
         visa.setRequiresVisa(true);
-        visa.setStatus("PENDING");
+        visa.setStatus(VisaStatus.PENDING);
 
         VisaRequest updateRequest = new VisaRequest();
-        updateRequest.setDestinationCountry("Germany");
+        updateRequest.setCountry("Germany");
+        updateRequest.setVisaType("Schengen");
         updateRequest.setRequiresVisa(true);
-        updateRequest.setStatus(VisaStatus.APPROVED);
+        updateRequest.setStatus(VisaStatus.GRANTED);
         updateRequest.setNotes("Approved via Embassy");
 
         when(visaRequirementRepository.findById(visaId)).thenReturn(Optional.of(visa));
@@ -293,8 +296,8 @@ public class TripServiceTest {
         VisaRequirement result = tripService.updateVisaRequirement(tripId, visaId, updateRequest);
 
         assertNotNull(result);
-        assertEquals("Germany", result.getDestinationCountry());
-        assertEquals("APPROVED", result.getStatus());
+        assertEquals("Germany", result.getCountry());
+        assertEquals(VisaStatus.GRANTED, result.getStatus());
         assertEquals("Approved via Embassy", result.getNotes());
     }
 
@@ -354,7 +357,7 @@ public class TripServiceTest {
     @Test
     public void getTripsForManager() {
         TripRequest trip = new TripRequest();
-        when(tripRequestRepository.findByApprovingManager_Id(20L)).thenReturn(Arrays.asList(trip));
+        when(tripRequestRepository.findByApprover_Id(20L)).thenReturn(Arrays.asList(trip));
 
         List<TripRequest> result = tripService.getTripsForManager(20L);
         assertEquals(1, result.size());

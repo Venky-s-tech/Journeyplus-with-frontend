@@ -15,8 +15,10 @@ import com.journeyplus.config.JwtTokenProvider;
 import com.journeyplus.iam.dto.AuthRequest;
 import com.journeyplus.iam.dto.AuthResponse;
 import com.journeyplus.iam.dto.RegisterRequest;
+import com.journeyplus.iam.entity.Grade;
 import com.journeyplus.iam.entity.Role;
 import com.journeyplus.iam.entity.User;
+import com.journeyplus.iam.repository.GradeRepository;
 import com.journeyplus.iam.repository.UserRepository;
 
 @Service
@@ -28,6 +30,9 @@ public class AuthService {
     private UserRepository userRepository;
 
     @Autowired
+    private GradeRepository gradeRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -37,13 +42,14 @@ public class AuthService {
     private AuthenticationManager authenticationManager;
 
     @Transactional
-    @AuditAction(module = "IAM", action = "USER_REGISTER")
+    @AuditAction(module = "IAM", action = "REGISTER")
     public User register(RegisterRequest request) {
         log.info("Attempting to register user with username: {}, role: {}", request.getUsername(), request.getRole());
+        
         // Prevent creation of admin accounts via public registration
-        if (request.getRole() == Role.TRAVEL_ADMIN) {
-            log.warn("Registration failed: TRAVEL_ADMIN role is not allowed for public registration, username: {}", request.getUsername());
-            throw new IllegalArgumentException("Registration as TRAVEL_ADMIN is not allowed");
+        if (request.getRole() == Role.ADMIN) {
+            log.warn("Registration failed: ADMIN role is not allowed for public registration, username: {}", request.getUsername());
+            throw new IllegalArgumentException("Registration as ADMIN is not allowed");
         }
         if (userRepository.existsByUsername(request.getUsername())) {
             log.warn("Registration failed: Username '{}' already exists", request.getUsername());
@@ -54,12 +60,21 @@ public class AuthService {
             throw new IllegalArgumentException("Email already exists");
         }
 
+        // Validate and retrieve Grade
+        Grade grade = gradeRepository.findById(request.getGradeId())
+                .orElseThrow(() -> new IllegalArgumentException("Grade ID '" + request.getGradeId() + "' does not exist"));
+
+        // Create User entity
         User user = new User(
-                request.getUsername(),
-                request.getEmail(),
+                request.getUsername().trim(),
+                request.getEmail().trim(),
                 passwordEncoder.encode(request.getPassword()), // BCrypt strength 12 encoded
                 request.getRole(),
-                request.getDepartment()
+                request.getName().trim(),
+                request.getPhone().trim(),
+                request.getDepartmentId().trim(),
+                request.getDepartmentId().trim(), // Set department to departmentId for backward compatibility
+                grade
         );
 
         // Auto-approve EMPLOYEE registrations; other roles remain pending for admin approval
@@ -76,16 +91,16 @@ public class AuthService {
         return savedUser;
     }
 
-    @AuditAction(module = "IAM", action = "USER_LOGIN")
+    @AuditAction(module = "IAM", action = "LOGIN")
     public AuthResponse login(AuthRequest request) {
         log.info("Authentication attempt for username: {}", request.getUsername());
         try {
-            authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
-            );
+            UsernamePasswordAuthenticationToken upa = new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword());
+            System.out.println(upa);
+            authenticationManager.authenticate(upa);
+
         } catch (org.springframework.security.authentication.DisabledException de) {
             log.warn("Authentication failed for username: {} - Account pending approval", request.getUsername());
-            // The account exists but is disabled (pending approval)
             throw new IllegalStateException("Account pending approval. Waiting for admin approval.");
         } catch (Exception e) {
             log.warn("Authentication failed for username: {} - Invalid credentials", request.getUsername());

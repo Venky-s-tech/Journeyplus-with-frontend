@@ -2,105 +2,113 @@ package com.journeyplus.advance.entity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.journeyplus.common.EncryptedBigDecimalConverter;
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.trip.entity.TripRequest;
+import lombok.Getter;
+import lombok.Setter;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 @Entity
-@Table(name = "advance_requests")
+@Table(name = "advance_requests", indexes = {
+    @Index(name = "idx_advance_trip", columnList = "trip_request_id"),
+    @Index(name = "idx_advance_employee", columnList = "employee_id"),
+    @Index(name = "idx_advance_status", columnList = "status")
+})
+@Getter
+@Setter
 public class AdvanceRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotNull(message = "Trip request is required")
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "trip_request_id", nullable = false)
+    @JsonIgnore
     private TripRequest tripRequest;
 
+    @NotNull(message = "Employee is required")
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id", nullable = false)
+    @JsonIgnore
     private User employee;
 
+    @NotNull(message = "Requested amount is required")
+    @DecimalMin(value = "0.01", message = "Requested amount must be positive")
     @Convert(converter = EncryptedBigDecimalConverter.class)
-    @Column(nullable = false, length = 255)
-    private BigDecimal amount;
+    @Column(name = "requested_amount", nullable = false, length = 255)
+    private BigDecimal requestedAmount;
 
-    @Column(name = "original_currency", nullable = false, length = 10)
-    private String originalCurrency;
+    @NotBlank(message = "Currency is required")
+    @Column(name = "currency", nullable = false, length = 10)
+    private String currency;
+
+    @NotBlank(message = "Purpose details are required")
+    @Column(name = "purpose_details", nullable = false, columnDefinition = "TEXT")
+    private String purposeDetails;
 
     @Convert(converter = EncryptedBigDecimalConverter.class)
     @Column(name = "usd_equivalent", nullable = false, length = 255)
     private BigDecimal usdEquivalent;
 
+    @NotNull(message = "Status is required")
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 50, columnDefinition = "VARCHAR(50)")
     private AdvanceStatus status = AdvanceStatus.REQUESTED;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "approver_id")
-    private User approver;
+    @JoinColumn(name = "approved_by_id")
+    @JsonIgnore
+    private User approvedBy;
 
-    @Column(name = "request_date", nullable = false)
-    private LocalDate requestDate = LocalDate.now();
+    @Column(name = "created_date", updatable = false)
+    private LocalDateTime createdDate = LocalDateTime.now();
+
+    @Column(name = "updated_date")
+    private LocalDateTime updatedDate = LocalDateTime.now();
 
     @Column(name = "disbursement_date")
     private LocalDate disbursementDate;
 
+    @PrePersist
+    protected void onCreate() {
+        createdDate = LocalDateTime.now();
+        updatedDate = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedDate = LocalDateTime.now();
+    }
+
     public AdvanceRequest() {}
 
-    public AdvanceRequest(TripRequest tripRequest, User employee, BigDecimal amount, String originalCurrency, BigDecimal usdEquivalent) {
+    public AdvanceRequest(TripRequest tripRequest, User employee, BigDecimal requestedAmount, String currency, String purposeDetails, BigDecimal usdEquivalent) {
         this.tripRequest = tripRequest;
         this.employee = employee;
-        this.amount = amount;
-        this.originalCurrency = originalCurrency;
+        this.requestedAmount = requestedAmount;
+        this.currency = currency;
+        this.purposeDetails = purposeDetails;
         this.usdEquivalent = usdEquivalent;
         this.status = AdvanceStatus.REQUESTED;
-        this.requestDate = LocalDate.now();
+        this.createdDate = LocalDateTime.now();
+        this.updatedDate = LocalDateTime.now();
     }
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    @JsonIgnore
-    public TripRequest getTripRequest() {
-        return tripRequest;
-    }
-
+    // JSON properties and Deprecated methods for backward compatibility
     @JsonProperty("tripRequestId")
     public Long getTripRequestId() {
         return tripRequest != null ? tripRequest.getId() : null;
-    }
-
-    public void setTripRequest(TripRequest tripRequest) {
-        this.tripRequest = tripRequest;
-    }
-
-    @JsonIgnore
-    public User getEmployee() {
-        return employee;
     }
 
     @JsonProperty("employeeId")
@@ -108,69 +116,58 @@ public class AdvanceRequest {
         return employee != null ? employee.getId() : null;
     }
 
-    public void setEmployee(User employee) {
-        this.employee = employee;
-    }
-
-    public BigDecimal getAmount() {
-        return amount;
-    }
-
-    public void setAmount(BigDecimal amount) {
-        this.amount = amount;
-    }
-
-    public String getOriginalCurrency() {
-        return originalCurrency;
-    }
-
-    public void setOriginalCurrency(String originalCurrency) {
-        this.originalCurrency = originalCurrency;
-    }
-
-    public BigDecimal getUsdEquivalent() {
-        return usdEquivalent;
-    }
-
-    public void setUsdEquivalent(BigDecimal usdEquivalent) {
-        this.usdEquivalent = usdEquivalent;
-    }
-
-    public AdvanceStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(AdvanceStatus status) {
-        this.status = status;
-    }
-
-    @JsonIgnore
-    public User getApprover() {
-        return approver;
-    }
-
     @JsonProperty("approverId")
     public Long getApproverId() {
-        return approver != null ? approver.getId() : null;
+        return approvedBy != null ? approvedBy.getId() : null;
     }
 
+    @Deprecated
+    @JsonIgnore
+    public BigDecimal getAmount() {
+        return requestedAmount;
+    }
+
+    @Deprecated
+    @JsonIgnore
+    public void setAmount(BigDecimal amount) {
+        this.requestedAmount = amount;
+    }
+
+    @Deprecated
+    @JsonIgnore
+    public String getOriginalCurrency() {
+        return currency;
+    }
+
+    @Deprecated
+    @JsonIgnore
+    public void setOriginalCurrency(String originalCurrency) {
+        this.currency = originalCurrency;
+    }
+
+    @Deprecated
+    @JsonIgnore
+    public User getApprover() {
+        return approvedBy;
+    }
+
+    @Deprecated
+    @JsonIgnore
     public void setApprover(User approver) {
-        this.approver = approver;
+        this.approvedBy = approver;
     }
 
+    @Deprecated
+    @JsonIgnore
     public LocalDate getRequestDate() {
-        return requestDate;
+        return createdDate != null ? createdDate.toLocalDate() : null;
     }
 
+    @Deprecated
+    @JsonIgnore
     public void setRequestDate(LocalDate requestDate) {
-        this.requestDate = requestDate;
-    }
-
-    public LocalDate getDisbursementDate() {
-        return disbursementDate;
-    }
-
-    public void setDisbursementDate(LocalDate disbursementDate) {
-        this.disbursementDate = disbursementDate;
+        if (requestDate != null) {
+            this.createdDate = requestDate.atStartOfDay();
+        }
     }
 }

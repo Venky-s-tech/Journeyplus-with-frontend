@@ -1,48 +1,83 @@
 package com.journeyplus.trip.dto;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 
 public class TripResponse {
     private Long id;
     private SimpleUserDTO employee;
     private String purpose;
     private String destination;
-    private LocalDate startDate;
-    private LocalDate endDate;
+    private LocalDate departureDate;
+    private LocalDate returnDate;
+    private String travelType;
+    private BigDecimal estimatedCost;
     private String status;
     private String comments;
-    private SimpleUserDTO approvingManager;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
-    private List<ItineraryLegResponse> legs;
-    private List<VisaRequirementResponse> visas;
+    private SimpleUserDTO approver;
+    private LocalDateTime createdDate;
+    private LocalDateTime updatedDate;
 
+    // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
     public SimpleUserDTO getEmployee() { return employee; }
     public void setEmployee(SimpleUserDTO employee) { this.employee = employee; }
+
     public String getPurpose() { return purpose; }
     public void setPurpose(String purpose) { this.purpose = purpose; }
+
     public String getDestination() { return destination; }
     public void setDestination(String destination) { this.destination = destination; }
-    public LocalDate getStartDate() { return startDate; }
-    public void setStartDate(LocalDate startDate) { this.startDate = startDate; }
-    public LocalDate getEndDate() { return endDate; }
-    public void setEndDate(LocalDate endDate) { this.endDate = endDate; }
+
+    public LocalDate getDepartureDate() { return departureDate; }
+    public void setDepartureDate(LocalDate departureDate) { this.departureDate = departureDate; }
+
+    public LocalDate getReturnDate() { return returnDate; }
+    public void setReturnDate(LocalDate returnDate) { this.returnDate = returnDate; }
+
+    public String getTravelType() { return travelType; }
+    public void setTravelType(String travelType) { this.travelType = travelType; }
+
+    public BigDecimal getEstimatedCost() { return estimatedCost; }
+    public void setEstimatedCost(BigDecimal estimatedCost) { this.estimatedCost = estimatedCost; }
+
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
     public String getComments() { return comments; }
     public void setComments(String comments) { this.comments = comments; }
-    public SimpleUserDTO getApprovingManager() { return approvingManager; }
-    public void setApprovingManager(SimpleUserDTO approvingManager) { this.approvingManager = approvingManager; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
-    public List<ItineraryLegResponse> getLegs() { return legs; }
-    public void setLegs(List<ItineraryLegResponse> legs) { this.legs = legs; }
-    public List<VisaRequirementResponse> getVisas() { return visas; }
-    public void setVisas(List<VisaRequirementResponse> visas) { this.visas = visas; }
+
+    public SimpleUserDTO getApprover() { return approver; }
+    public void setApprover(SimpleUserDTO approver) { this.approver = approver; }
+
+    public LocalDateTime getCreatedDate() { return createdDate; }
+    public void setCreatedDate(LocalDateTime createdDate) { this.createdDate = createdDate; }
+
+    public LocalDateTime getUpdatedDate() { return updatedDate; }
+    public void setUpdatedDate(LocalDateTime updatedDate) { this.updatedDate = updatedDate; }
+
+    // Deprecated getters and setters for backward compatibility
+    @Deprecated
+    public LocalDate getStartDate() { return departureDate; }
+    @Deprecated
+    public void setStartDate(LocalDate startDate) { this.departureDate = startDate; }
+    @Deprecated
+    public LocalDate getEndDate() { return returnDate; }
+    @Deprecated
+    public void setEndDate(LocalDate endDate) { this.returnDate = endDate; }
+    @Deprecated
+    public SimpleUserDTO getApprovingManager() { return approver; }
+    @Deprecated
+    public void setApprovingManager(SimpleUserDTO approvingManager) { this.approver = approvingManager; }
+    @Deprecated
+    public LocalDateTime getCreatedAt() { return createdDate; }
+    @Deprecated
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdDate = createdAt; }
+    @Deprecated
+    public LocalDateTime getUpdatedAt() { return updatedDate; }
+    @Deprecated
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedDate = updatedAt; }
 }

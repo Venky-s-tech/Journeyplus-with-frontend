@@ -12,7 +12,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/reports")
-@PreAuthorize("hasAnyRole('FINANCE_EXECUTIVE', 'COMPLIANCE_OFFICER', 'TRAVEL_ADMIN')")
+@PreAuthorize("hasAnyRole('FINANCE', 'COMPLIANCE', 'ADMIN')")
 public class ReportController {
 
     @Autowired

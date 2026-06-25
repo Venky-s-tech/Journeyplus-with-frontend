@@ -11,6 +11,7 @@ import com.journeyplus.iam.dto.AuthRequest;
 import com.journeyplus.iam.dto.AuthResponse;
 import com.journeyplus.iam.dto.RefreshRequest;
 import com.journeyplus.iam.dto.RegisterRequest;
+import com.journeyplus.iam.dto.UserResponse;
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.iam.service.AuthService;
 
@@ -37,8 +38,8 @@ public class AuthController {
             );
         }
 
-        // Default: return created user for auto-approved roles (EMPLOYEE)
-        return ResponseEntity.ok(user);
+        // Return secure UserResponse DTO to prevent password leakage
+        return ResponseEntity.ok(new UserResponse(user));
     }
 
     @PostMapping("/login")
@@ -52,5 +53,4 @@ public class AuthController {
         AuthResponse response = authService.refresh(request.getRefreshToken());
         return ResponseEntity.ok(response);
     }
-    
 }

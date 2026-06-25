@@ -2,38 +2,57 @@ package com.journeyplus.trip.entity;
 
 import com.journeyplus.iam.entity.User;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import com.journeyplus.common.EncryptedBigDecimalConverter;
+import lombok.Getter;
+import lombok.Setter;
 
 @Entity
-@Table(name = "trip_requests")
+@Table(name = "trip_requests", indexes = {
+    @Index(name = "idx_trip_employee", columnList = "employee_id"),
+    @Index(name = "idx_trip_status", columnList = "status"),
+    @Index(name = "idx_trip_travel_type", columnList = "travel_type"),
+    @Index(name = "idx_trip_destination", columnList = "destination")
+})
+@Getter
+@Setter
 public class TripRequest {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotNull(message = "Employee is required")
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "employee_id", nullable = false)
     private User employee;
 
+    @NotBlank(message = "Purpose is required")
     @Column(nullable = false)
     private String purpose;
 
+    @NotBlank(message = "Destination is required")
     @Column(nullable = false, length = 150)
     private String destination;
 
-    @Column(name = "start_date", nullable = false)
-    private LocalDate startDate;
+    @NotNull(message = "Departure date is required")
+    @Column(name = "departure_date", nullable = false)
+    private LocalDate departureDate;
 
-    @Column(name = "end_date", nullable = false)
-    private LocalDate endDate;
+    @NotNull(message = "Return date is required")
+    @Column(name = "return_date", nullable = false)
+    private LocalDate returnDate;
 
+    @NotBlank(message = "Travel type is required")
     @Column(name = "travel_type", length = 50)
     private String travelType; // DOMESTIC / INTERNATIONAL
 
+    @DecimalMin(value = "0.01", message = "Estimated cost must be positive")
     @Convert(converter = EncryptedBigDecimalConverter.class)
     @Column(name = "estimated_cost", length = 255)
     private BigDecimal estimatedCost;
@@ -46,110 +65,87 @@ public class TripRequest {
     private String comments;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "approving_manager_id")
-    private User approvingManager;
+    @JoinColumn(name = "approver_id")
+    private User approver;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name = "created_date", updatable = false)
+    private LocalDateTime createdDate = LocalDateTime.now();
 
-    @Column(name = "updated_at")
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    @Column(name = "updated_date")
+    private LocalDateTime updatedDate = LocalDateTime.now();
+
+    @PrePersist
+    protected void onCreate() {
+        createdDate = LocalDateTime.now();
+        updatedDate = LocalDateTime.now();
+    }
 
     @PreUpdate
     protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
+        updatedDate = LocalDateTime.now();
     }
 
     public TripRequest() {}
 
-    public TripRequest(User employee, String purpose, String destination, LocalDate startDate, LocalDate endDate) {
+    public TripRequest(User employee, String purpose, String destination, LocalDate departureDate, LocalDate returnDate) {
         this.employee = employee;
         this.purpose = purpose;
         this.destination = destination;
-        this.startDate = startDate;
-        this.endDate = endDate;
+        this.departureDate = departureDate;
+        this.returnDate = returnDate;
         this.status = TripStatus.DRAFT;
-        this.createdAt = LocalDateTime.now();
+        this.createdDate = LocalDateTime.now();
+        this.updatedDate = LocalDateTime.now();
     }
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public User getEmployee() {
-        return employee;
-    }
-
-    public void setEmployee(User employee) {
-        this.employee = employee;
-    }
-
-    public String getPurpose() {
-        return purpose;
-    }
-
-    public void setPurpose(String purpose) {
-        this.purpose = purpose;
-    }
-
-    public String getDestination() {
-        return destination;
-    }
-
-    public void setDestination(String destination) {
-        this.destination = destination;
-    }
-
-    public LocalDate getStartDate() {
-        return startDate;
-    }
-
-    public void setStartDate(LocalDate startDate) {
-        this.startDate = startDate;
-    }
-
-    public LocalDate getEndDate() {
-        return endDate;
-    }
-
-    public void setEndDate(LocalDate endDate) {
-        this.endDate = endDate;
-    }
-
-    public TripStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(TripStatus status) {
-        this.status = status;
-    }
-
-    public String getComments() {
-        return comments;
-    }
-
-    public void setComments(String comments) {
-        this.comments = comments;
-    }
-
+    // Deprecated getters and setters for backward compatibility with other modules
+    @Deprecated
     public User getApprovingManager() {
-        return approvingManager;
+        return approver;
     }
 
+    @Deprecated
     public void setApprovingManager(User approvingManager) {
-        this.approvingManager = approvingManager;
+        this.approver = approvingManager;
     }
 
+    @Deprecated
+    public LocalDate getStartDate() {
+        return departureDate;
+    }
+
+    @Deprecated
+    public void setStartDate(LocalDate startDate) {
+        this.departureDate = startDate;
+    }
+
+    @Deprecated
+    public LocalDate getEndDate() {
+        return returnDate;
+    }
+
+    @Deprecated
+    public void setEndDate(LocalDate endDate) {
+        this.returnDate = endDate;
+    }
+
+    @Deprecated
     public LocalDateTime getCreatedAt() {
-        return createdAt;
+        return createdDate;
     }
 
+    @Deprecated
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdDate = createdAt;
+    }
+
+    @Deprecated
     public LocalDateTime getUpdatedAt() {
-        return updatedAt;
+        return updatedDate;
+    }
+
+    @Deprecated
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedDate = updatedAt;
     }
 }

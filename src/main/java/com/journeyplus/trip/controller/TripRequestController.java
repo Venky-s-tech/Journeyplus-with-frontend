@@ -1,5 +1,6 @@
 package com.journeyplus.trip.controller;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -10,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -18,15 +20,23 @@ import org.springframework.web.bind.annotation.RestController;
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.iam.repository.UserRepository;
 import com.journeyplus.trip.dto.ItineraryLegInput;
+import com.journeyplus.trip.dto.ItineraryLegResponse;
 import com.journeyplus.trip.dto.SimpleUserDTO;
 import com.journeyplus.trip.dto.TripCreationRequest;
 import com.journeyplus.trip.dto.TripRequestInput;
 import com.journeyplus.trip.dto.TripResponse;
+import com.journeyplus.trip.dto.TripSummaryResponse;
 import com.journeyplus.trip.dto.VisaRequirementInput;
+import com.journeyplus.trip.dto.VisaRequirementResponse;
+import com.journeyplus.trip.entity.ItineraryLeg;
 import com.journeyplus.trip.entity.TripRequest;
 import com.journeyplus.trip.entity.TripStatus;
+import com.journeyplus.trip.entity.VisaRequirement;
+import com.journeyplus.trip.repository.ItineraryLegRepository;
+import com.journeyplus.trip.repository.VisaRequirementRepository;
 import com.journeyplus.trip.service.TripService;
 
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/trips")
@@ -38,130 +48,137 @@ public class TripRequestController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private ItineraryLegRepository itineraryLegRepository;
+
+    @Autowired
+    private VisaRequirementRepository visaRequirementRepository;
+
     @PostMapping
     @PreAuthorize("hasRole('EMPLOYEE')")
-    public ResponseEntity<TripRequest> createTripRequest(
-            @RequestBody TripCreationRequest payload,
+    public ResponseEntity<TripResponse> createTripRequest(
+            @Valid @RequestBody TripRequestInput r, // Accept basic inputs directly
             @AuthenticationPrincipal User employee) {
 
-        TripRequestInput r = payload.getTripRequest();
         TripRequest tripEntity = new TripRequest();
         if (r != null) {
             tripEntity.setPurpose(r.getPurpose());
             tripEntity.setDestination(r.getDestination());
-            tripEntity.setStartDate(r.getStartDate());
-            tripEntity.setEndDate(r.getEndDate());
+            tripEntity.setDepartureDate(r.getDepartureDate());
+            tripEntity.setReturnDate(r.getReturnDate());
+            tripEntity.setTravelType(r.getTravelType());
+            tripEntity.setEstimatedCost(r.getEstimatedCost());
             tripEntity.setComments(r.getComments());
-            if (r.getApprovingManagerUsername() != null && !r.getApprovingManagerUsername().isBlank()) {
-                com.journeyplus.iam.entity.User mgr = userRepository.findByUsername(r.getApprovingManagerUsername())
-                        .orElseThrow(() -> new IllegalArgumentException("Approving manager not found: " + r.getApprovingManagerUsername()));
-                tripEntity.setApprovingManager(mgr);
+
+            if (r.getApproverUsername() != null && !r.getApproverUsername().isBlank()) {
+                User mgr = userRepository.findByUsername(r.getApproverUsername())
+                        .orElseThrow(() -> new IllegalArgumentException("Approving manager not found: " + r.getApproverUsername()));
+                tripEntity.setApprover(mgr);
             }
         }
 
-        // Map legs
-        java.util.List<com.journeyplus.trip.entity.ItineraryLeg> legs = null;
-        if (payload.getLegs() != null) {
-            legs = new java.util.ArrayList<>();
-            for (ItineraryLegInput li : payload.getLegs()) {
-                com.journeyplus.trip.entity.ItineraryLeg leg = new com.journeyplus.trip.entity.ItineraryLeg();
-                leg.setDepartureCity(li.getDepartureCity());
-                leg.setArrivalCity(li.getArrivalCity());
-                leg.setTravelMode(li.getTravelMode());
-                leg.setTravelDate(li.getTravelDate());
-                if (li.getEstimatedCost() != null) leg.setEstimatedCost(li.getEstimatedCost());
-                leg.setOriginalCurrency(li.getOriginalCurrency());
-                if (li.getUsdEquivalent() != null) leg.setUsdEquivalent(li.getUsdEquivalent());
-                leg.setCarrierDetails(li.getCarrierDetails());
-                leg.setBookingReference(li.getBookingReference());
-                legs.add(leg);
-            }
-        }
-
-        // Map visas
-        java.util.List<com.journeyplus.trip.entity.VisaRequirement> visas = null;
-        if (payload.getVisas() != null) {
-            visas = new java.util.ArrayList<>();
-            for (VisaRequirementInput vi : payload.getVisas()) {
-                com.journeyplus.trip.entity.VisaRequirement v = new com.journeyplus.trip.entity.VisaRequirement();
-                v.setDestinationCountry(vi.getDestinationCountry());
-                v.setRequiresVisa(vi.isRequiresVisa());
-                v.setNotes(vi.getNotes());
-                visas.add(v);
-            }
-        }
-
-        // The controller/service will set employee from the authenticated principal
         tripEntity.setEmployee(employee);
 
+        // Explicitly pass null or empty collections for legs and visas since
+        // the employee shouldn't specify them when raising the initial request.
         TripRequest trip = tripService.createTripRequest(
                 tripEntity,
-                legs,
-                visas
+                null,
+                null
         );
 
-        return ResponseEntity.ok(trip);
+        return ResponseEntity.ok(toTripResponse(trip));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    public ResponseEntity<TripResponse> updateTripRequest(
+            @PathVariable Long id,
+            @Valid @RequestBody TripRequestInput input,
+            @AuthenticationPrincipal User employee) {
+
+        TripRequest updatedData = new TripRequest();
+        updatedData.setPurpose(input.getPurpose());
+        updatedData.setDestination(input.getDestination());
+        updatedData.setDepartureDate(input.getDepartureDate());
+        updatedData.setReturnDate(input.getReturnDate());
+        updatedData.setTravelType(input.getTravelType());
+        updatedData.setEstimatedCost(input.getEstimatedCost());
+        updatedData.setComments(input.getComments());
+        if (input.getApproverUsername() != null && !input.getApproverUsername().isBlank()) {
+            User mgr = userRepository.findByUsername(input.getApproverUsername())
+                    .orElseThrow(() -> new IllegalArgumentException("Approving manager not found: " + input.getApproverUsername()));
+            updatedData.setApprover(mgr);
+        }
+
+        TripRequest saved = tripService.updateTripRequest(id, updatedData, employee);
+        return ResponseEntity.ok(toTripResponse(saved));
     }
 
     @PostMapping("/{id}/submit")
     @PreAuthorize("hasRole('EMPLOYEE')")
-    public ResponseEntity<TripResponse> submitTripRequest(@PathVariable Long id) {
-        try {
-            // Read current trip status first to avoid throwing and to provide idempotent responses
-            TripRequest current = tripService.getTripRequest(id);
-            if (current == null) {
-                return ResponseEntity.status(404).body(null);
-            }
+    public ResponseEntity<TripResponse> submitTripRequest(@PathVariable Long id, @AuthenticationPrincipal User employee) {
+        TripRequest trip = tripService.getTripRequest(id);
 
-            // If not in DRAFT state, return appropriate response without invoking submit
-            if (current.getStatus() != TripStatus.DRAFT) {
-                if (current.getStatus() == TripStatus.SUBMITTED) {
-                    // Already submitted — return 200 with current trip (idempotent)
-                    return ResponseEntity.ok(toTripResponse(current));
-                }
-                // Other non-allowed states -> 409 Conflict with current trip in body
-                return ResponseEntity.status(409).body(toTripResponse(current));
-            }
-
-            TripRequest saved = tripService.submitTripRequest(id);
-            return ResponseEntity.ok(toTripResponse(saved));
-        } catch (IllegalArgumentException e) {
-            // Trip not found or other invalid argument
-            return ResponseEntity.status(404).body(null);
-        } catch (Exception e) {
-            // Unexpected error: return 500 with no stacktrace
-            return ResponseEntity.status(500).body(null);
+        // Enforce ownership
+        if (!trip.getEmployee().getId().equals(employee.getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the Trip Owner can submit this trip request");
         }
+
+        TripRequest saved = tripService.submitTripRequest(id);
+        return ResponseEntity.ok(toTripResponse(saved));
     }
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasRole('APPROVING_MANAGER')")
-    public ResponseEntity<TripRequest> approveTripRequest(
+    public ResponseEntity<TripResponse> approveTripRequest(
             @PathVariable Long id,
             @RequestParam(required = false) String comments,
             @AuthenticationPrincipal User manager) {
-        return ResponseEntity.ok(tripService.approveOrRejectTripRequest(id, TripStatus.APPROVED, comments, manager));
+        TripRequest saved = tripService.approveOrRejectTripRequest(id, TripStatus.APPROVED, comments, manager);
+        return ResponseEntity.ok(toTripResponse(saved));
     }
 
     @PostMapping("/{id}/reject")
     @PreAuthorize("hasRole('APPROVING_MANAGER')")
-    public ResponseEntity<TripRequest> rejectTripRequest(
+    public ResponseEntity<TripResponse> rejectTripRequest(
             @PathVariable Long id,
             @RequestParam(required = false) String comments,
             @AuthenticationPrincipal User manager) {
-        return ResponseEntity.ok(tripService.approveOrRejectTripRequest(id, TripStatus.REJECTED, comments, manager));
+        TripRequest saved = tripService.approveOrRejectTripRequest(id, TripStatus.REJECTED, comments, manager);
+        return ResponseEntity.ok(toTripResponse(saved));
     }
 
     @PostMapping("/{id}/complete")
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'TRAVEL_DESK_COORDINATOR')")
-    public ResponseEntity<TripRequest> completeTripRequest(@PathVariable Long id) {
-        return ResponseEntity.ok(tripService.completeOrCancelTripRequest(id, TripStatus.COMPLETED));
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'TRAVEL_DESK')")
+    public ResponseEntity<TripResponse> completeTripRequest(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        TripRequest trip = tripService.getTripRequest(id);
+
+        // Ownership or Travel Desk check
+        boolean isOwner = trip.getEmployee().getId().equals(user.getId());
+        boolean isTravelDesk = user.getRole() == com.journeyplus.iam.entity.Role.TRAVEL_DESK || user.getRole() == com.journeyplus.iam.entity.Role.ADMIN;
+        if (!isOwner && !isTravelDesk) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the Trip Owner or Travel Desk can complete this trip");
+        }
+
+        TripRequest saved = tripService.completeOrCancelTripRequest(id, TripStatus.COMPLETED);
+        return ResponseEntity.ok(toTripResponse(saved));
     }
 
     @PostMapping("/{id}/cancel")
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'TRAVEL_DESK_COORDINATOR')")
-    public ResponseEntity<TripRequest> cancelTripRequest(@PathVariable Long id) {
-        return ResponseEntity.ok(tripService.completeOrCancelTripRequest(id, TripStatus.CANCELLED));
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'TRAVEL_DESK')")
+    public ResponseEntity<TripResponse> cancelTripRequest(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        TripRequest trip = tripService.getTripRequest(id);
+
+        // Ownership or Travel Desk check
+        boolean isOwner = trip.getEmployee().getId().equals(user.getId());
+        boolean isTravelDesk = user.getRole() == com.journeyplus.iam.entity.Role.TRAVEL_DESK || user.getRole() == com.journeyplus.iam.entity.Role.ADMIN;
+        if (!isOwner && !isTravelDesk) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the Trip Owner or Travel Desk can cancel this trip");
+        }
+
+        TripRequest saved = tripService.completeOrCancelTripRequest(id, TripStatus.CANCELLED);
+        return ResponseEntity.ok(toTripResponse(saved));
     }
 
     @GetMapping("/my-trips")
@@ -175,40 +192,94 @@ public class TripRequestController {
     @GetMapping("/pending-approvals")
     @PreAuthorize("hasRole('APPROVING_MANAGER')")
     public ResponseEntity<List<TripResponse>> getPendingApprovals(@AuthenticationPrincipal User manager) {
-        List<TripRequest> trips = tripService.getTripsForManager(manager.getId());
-        List<TripResponse> dto = trips.stream().map(this::toTripResponse).collect(java.util.stream.Collectors.toList());
+        List<TripRequest> trips = tripService.getPendingApprovalsForManager(manager.getId());
+        List<TripResponse> dto = trips.stream().map(this::toTripResponse).collect(Collectors.toList());
         return ResponseEntity.ok(dto);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<TripResponse> getTripRequest(@PathVariable Long id, @AuthenticationPrincipal User user) {
         TripRequest trip = tripService.getTripRequest(id);
-        if (trip == null) throw new IllegalArgumentException("Trip not found");
+        validateTripViewAuthorization(trip, user);
+        return ResponseEntity.ok(toTripResponse(trip));
+    }
 
-        // Allow if user is Travel Admin, Compliance, Finance, Travel Desk Coordinator
-        org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null) {
-            java.util.Collection<? extends org.springframework.security.core.GrantedAuthority> auths = auth.getAuthorities();
-            for (org.springframework.security.core.GrantedAuthority a : auths) {
-                String r = a.getAuthority();
-                if (r != null && (r.endsWith("TRAVEL_ADMIN") || r.endsWith("COMPLIANCE_OFFICER") || r.endsWith("FINANCE_EXECUTIVE") || r.endsWith("TRAVEL_DESK_COORDINATOR"))) {
-                    return ResponseEntity.ok(toTripResponse(trip));
-                }
+    @GetMapping
+    public ResponseEntity<List<TripResponse>> getAllTrips(
+            @RequestParam(required = false) Long employeeId,
+            @RequestParam(required = false) TripStatus status,
+            @RequestParam(required = false) String travelType,
+            @RequestParam(required = false) String destination,
+            @AuthenticationPrincipal User user) {
+
+        // Non-admin/non-manager/non-traveldesk users can only view their own trips
+        boolean isPrivileged = user.getRole() == com.journeyplus.iam.entity.Role.ADMIN ||
+                              user.getRole() == com.journeyplus.iam.entity.Role.TRAVEL_DESK ||
+                              user.getRole() == com.journeyplus.iam.entity.Role.APPROVING_MANAGER ||
+                              user.getRole() == com.journeyplus.iam.entity.Role.FINANCE ||
+                              user.getRole() == com.journeyplus.iam.entity.Role.COMPLIANCE;
+
+        Long targetEmployeeId = employeeId;
+        if (!isPrivileged) {
+            targetEmployeeId = user.getId();
+        }
+
+        List<TripRequest> trips = tripService.filterTrips(targetEmployeeId, status, travelType, destination);
+        List<TripResponse> dto = trips.stream().map(this::toTripResponse).collect(Collectors.toList());
+        return ResponseEntity.ok(dto);
+    }
+
+    @GetMapping("/{id}/summary")
+    public ResponseEntity<TripSummaryResponse> getTripSummary(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        TripRequest trip = tripService.getTripRequest(id);
+        validateTripViewAuthorization(trip, user);
+
+        TripResponse tripDetails = toTripResponse(trip);
+        List<ItineraryLeg> legs = itineraryLegRepository.findByTripRequest_Id(id);
+        List<VisaRequirement> visas = visaRequirementRepository.findByTripRequest_Id(id);
+
+        List<ItineraryLegResponse> legResponses = legs.stream().map(this::toLegResponse).collect(Collectors.toList());
+        List<VisaRequirementResponse> visaResponses = visas.stream().map(this::toVisaResponse).collect(Collectors.toList());
+
+        BigDecimal totalCost = BigDecimal.ZERO;
+        for (ItineraryLeg leg : legs) {
+            if (leg.getCost() != null) {
+                totalCost = totalCost.add(leg.getCost());
             }
         }
 
-        // Allow employee owner or approving manager
-        if (trip.getEmployee() != null && user != null && trip.getEmployee().getId().equals(user.getId())) {
-            return ResponseEntity.ok(toTripResponse(trip));
+        TripSummaryResponse summary = new TripSummaryResponse(tripDetails, legResponses, visaResponses, totalCost);
+        return ResponseEntity.ok(summary);
+    }
+
+    private void validateTripViewAuthorization(TripRequest trip, User user) {
+        if (user == null) {
+            throw new org.springframework.security.access.AccessDeniedException("User not authenticated");
         }
-        if (trip.getApprovingManager() != null && user != null && trip.getApprovingManager().getId().equals(user.getId())) {
-            return ResponseEntity.ok(toTripResponse(trip));
+
+        // Admins, Compliance, Finance, Travel Desk can view all
+        com.journeyplus.iam.entity.Role role = user.getRole();
+        if (role == com.journeyplus.iam.entity.Role.ADMIN ||
+            role == com.journeyplus.iam.entity.Role.COMPLIANCE ||
+            role == com.journeyplus.iam.entity.Role.FINANCE ||
+            role == com.journeyplus.iam.entity.Role.TRAVEL_DESK) {
+            return;
+        }
+
+        // Owner can view
+        if (trip.getEmployee() != null && trip.getEmployee().getId().equals(user.getId())) {
+            return;
+        }
+
+        // Assigned Approving Manager can view
+        if (trip.getApprover() != null && trip.getApprover().getId().equals(user.getId())) {
+            return;
         }
 
         throw new org.springframework.security.access.AccessDeniedException("You are not authorized to view this trip");
     }
 
-    private SimpleUserDTO toSimpleUser(com.journeyplus.iam.entity.User u) {
+    private SimpleUserDTO toSimpleUser(User u) {
         if (u == null) return null;
         SimpleUserDTO s = new SimpleUserDTO();
         try {
@@ -221,7 +292,7 @@ public class TripRequestController {
                 if (proxy.getHibernateLazyInitializer().isUninitialized()) {
                     return s;
                 }
-                u = (com.journeyplus.iam.entity.User) proxy.getHibernateLazyInitializer().getImplementation();
+                u = (User) proxy.getHibernateLazyInitializer().getImplementation();
             }
 
             s.setId(u.getId());
@@ -244,13 +315,50 @@ public class TripRequestController {
         r.setEmployee(toSimpleUser(t.getEmployee()));
         r.setPurpose(t.getPurpose());
         r.setDestination(t.getDestination());
-        r.setStartDate(t.getStartDate());
-        r.setEndDate(t.getEndDate());
+        r.setDepartureDate(t.getDepartureDate());
+        r.setReturnDate(t.getReturnDate());
+        r.setTravelType(t.getTravelType());
+        r.setEstimatedCost(t.getEstimatedCost());
         r.setStatus(t.getStatus() != null ? t.getStatus().name() : null);
         r.setComments(t.getComments());
-        r.setApprovingManager(toSimpleUser(t.getApprovingManager()));
-        r.setCreatedAt(t.getCreatedAt());
-        r.setUpdatedAt(t.getUpdatedAt());
+        r.setApprover(toSimpleUser(t.getApprover()));
+        r.setCreatedDate(t.getCreatedDate());
+        r.setUpdatedDate(t.getUpdatedDate());
+        return r;
+    }
+
+    private ItineraryLegResponse toLegResponse(ItineraryLeg leg) {
+        if (leg == null) return null;
+        ItineraryLegResponse r = new ItineraryLegResponse();
+        r.setId(leg.getId());
+        r.setOrigin(leg.getOrigin());
+        r.setDestination(leg.getDestination());
+        r.setLegType(leg.getLegType() != null ? leg.getLegType().name() : null);
+        r.setTravelDate(leg.getTravelDate());
+        r.setDepartureDateTime(leg.getDepartureDateTime());
+        r.setArrivalDateTime(leg.getArrivalDateTime());
+        r.setCost(leg.getCost());
+        r.setOriginalCurrency(leg.getOriginalCurrency());
+        r.setUsdEquivalent(leg.getUsdEquivalent());
+        r.setCarrierDetails(leg.getCarrierDetails());
+        r.setBookingRef(leg.getBookingRef());
+        r.setStatus(leg.getStatus() != null ? leg.getStatus().name() : null);
+        return r;
+    }
+
+    private VisaRequirementResponse toVisaResponse(VisaRequirement v) {
+        if (v == null) return null;
+        VisaRequirementResponse r = new VisaRequirementResponse();
+        r.setId(v.getId());
+        r.setCountry(v.getCountry());
+        r.setVisaType(v.getVisaType());
+        r.setRequiresVisa(v.isRequiresVisa());
+        r.setApplicationDate(v.getApplicationDate());
+        r.setSubmittedDate(v.getSubmittedDate());
+        r.setStatus(v.getStatus() != null ? v.getStatus().name() : null);
+        r.setNotes(v.getNotes());
+        r.setCreatedDate(v.getCreatedDate());
+        r.setUpdatedDate(v.getUpdatedDate());
         return r;
     }
 }

@@ -40,7 +40,6 @@ public class ExpenseController {
             throw new IllegalArgumentException("Trip request does not belong to the authenticated employee");
         }
 
-        // Map minimal incoming request to ExpenseClaim entity
         ExpenseClaim claim = new ExpenseClaim();
         claim.setTripRequest(trip);
         claim.setEmployee(employee);
@@ -49,7 +48,7 @@ public class ExpenseController {
         if (claimRequest.getTotalAmount() != null) claim.setTotalAmount(new java.math.BigDecimal(claimRequest.getTotalAmount().toString()));
         claim.setOriginalCurrency(claimRequest.getOriginalCurrency());
 
-        return ResponseEntity.ok(expenseService.createExpenseClaim(claim));
+        return ResponseEntity.ok(expenseService.createExpenseClaim(claim, claimRequest.getExpenseLines()));
     }
 
     @PostMapping("/{claimId}/lines")
@@ -58,7 +57,6 @@ public class ExpenseController {
     public ResponseEntity<ExpenseLine> addExpenseLine(
             @PathVariable Long claimId,
             @RequestBody com.journeyplus.expense.dto.ExpenseLineRequest lineRequest) {
-        // Map minimal incoming fields to the ExpenseLine entity; do not require caller to send internal fields
         ExpenseLine line = new ExpenseLine();
         line.setExpenseDate(lineRequest.getExpenseDate());
         line.setCategory(lineRequest.getCategory());
@@ -103,7 +101,7 @@ public class ExpenseController {
     }
 
     @PostMapping("/{claimId}/reimburse")
-    @PreAuthorize("hasRole('FINANCE_EXECUTIVE')")
+    @PreAuthorize("hasRole('FINANCE')")
     @Operation(summary = "Disburse reimbursement", description = "Create a reimbursement record for a claim. Provide reimbursement JSON in the request body.")
     public ResponseEntity<ExpenseClaim> disburseReimbursement(
             @PathVariable Long claimId,
@@ -125,7 +123,7 @@ public class ExpenseController {
         if (auth != null) {
             for (org.springframework.security.core.GrantedAuthority a : auth.getAuthorities()) {
                 String r = a.getAuthority();
-                if (r != null && (r.endsWith("TRAVEL_ADMIN") || r.endsWith("COMPLIANCE_OFFICER") || r.endsWith("FINANCE_EXECUTIVE"))) {
+                if (r != null && (r.endsWith("ADMIN") || r.endsWith("COMPLIANCE") || r.endsWith("FINANCE"))) {
                     return ResponseEntity.ok(claim);
                 }
             }
@@ -147,7 +145,7 @@ public class ExpenseController {
         if (auth != null) {
             for (org.springframework.security.core.GrantedAuthority a : auth.getAuthorities()) {
                 String r = a.getAuthority();
-                if (r != null && (r.endsWith("TRAVEL_ADMIN") || r.endsWith("COMPLIANCE_OFFICER") || r.endsWith("FINANCE_EXECUTIVE"))) {
+                if (r != null && (r.endsWith("ADMIN") || r.endsWith("COMPLIANCE") || r.endsWith("FINANCE"))) {
                     return ResponseEntity.ok(expenseService.getLinesByClaim(claimId));
                 }
             }

@@ -25,7 +25,7 @@ public class AdminRoleController {
     private UserRepository userRepository;
 
     @PostMapping("/{id}/role")
-    @PreAuthorize("hasRole('TRAVEL_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> setRole(@PathVariable Long id, @RequestBody RoleUpdateRequest body) {
         Optional<User> opt = userRepository.findById(id);
         if (!opt.isPresent()) {
@@ -49,7 +49,7 @@ public class AdminRoleController {
     }
 
     @GetMapping("/{id}/role")
-    @PreAuthorize("hasRole('TRAVEL_ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> getRole(@PathVariable Long id) {
         Optional<User> opt = userRepository.findById(id);
         if (!opt.isPresent()) return ResponseEntity.notFound().build();

@@ -21,8 +21,10 @@ import com.journeyplus.config.JwtTokenProvider;
 import com.journeyplus.iam.dto.AuthRequest;
 import com.journeyplus.iam.dto.AuthResponse;
 import com.journeyplus.iam.dto.RegisterRequest;
+import com.journeyplus.iam.entity.Grade;
 import com.journeyplus.iam.entity.Role;
 import com.journeyplus.iam.entity.User;
+import com.journeyplus.iam.repository.GradeRepository;
 import com.journeyplus.iam.repository.UserRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +32,9 @@ public class AuthServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private GradeRepository gradeRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -50,10 +55,16 @@ public class AuthServiceTest {
         request.setEmail("emp@journeyplus.com");
         request.setPassword("password123");
         request.setRole(Role.EMPLOYEE);
-        request.setDepartment("Engineering");
+        request.setName("Employee Name");
+        request.setPhone("1234567890");
+        request.setGradeId("G1");
+        request.setDepartmentId("Engineering");
+
+        Grade grade = new Grade("G1", "Junior Employee", "Junior Level", "Active");
 
         when(userRepository.existsByUsername(request.getUsername())).thenReturn(false);
         when(userRepository.existsByEmail(request.getEmail())).thenReturn(false);
+        when(gradeRepository.findById("G1")).thenReturn(Optional.of(grade));
         when(passwordEncoder.encode(request.getPassword())).thenReturn("encodedPassword");
         
         User savedUser = new User(
@@ -61,7 +72,11 @@ public class AuthServiceTest {
                 request.getEmail(),
                 "encodedPassword",
                 request.getRole(),
-                request.getDepartment()
+                request.getName(),
+                request.getPhone(),
+                request.getDepartmentId(),
+                request.getDepartmentId(),
+                grade
         );
         savedUser.setActive(true);
 
@@ -82,10 +97,16 @@ public class AuthServiceTest {
         request.setEmail("manager@journeyplus.com");
         request.setPassword("password123");
         request.setRole(Role.APPROVING_MANAGER);
-        request.setDepartment("Engineering");
+        request.setName("Manager Name");
+        request.setPhone("1234567890");
+        request.setGradeId("G3");
+        request.setDepartmentId("Engineering");
+
+        Grade grade = new Grade("G3", "Manager", "Manager Level", "Active");
 
         when(userRepository.existsByUsername(request.getUsername())).thenReturn(false);
         when(userRepository.existsByEmail(request.getEmail())).thenReturn(false);
+        when(gradeRepository.findById("G3")).thenReturn(Optional.of(grade));
         when(passwordEncoder.encode(request.getPassword())).thenReturn("encodedPassword");
 
         User savedUser = new User(
@@ -93,7 +114,11 @@ public class AuthServiceTest {
                 request.getEmail(),
                 "encodedPassword",
                 request.getRole(),
-                request.getDepartment()
+                request.getName(),
+                request.getPhone(),
+                request.getDepartmentId(),
+                request.getDepartmentId(),
+                grade
         );
         savedUser.setActive(false);
 
@@ -110,13 +135,13 @@ public class AuthServiceTest {
     @Test
     public void register_ThrowsException_ForTravelAdmin() {
         RegisterRequest request = new RegisterRequest();
-        request.setRole(Role.TRAVEL_ADMIN);
+        request.setRole(Role.ADMIN);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             authService.register(request);
         });
 
-        assertEquals("Registration as TRAVEL_ADMIN is not allowed", exception.getMessage());
+        assertEquals("Registration as ADMIN is not allowed", exception.getMessage());
         verify(userRepository, never()).save(any(User.class));
     }
 

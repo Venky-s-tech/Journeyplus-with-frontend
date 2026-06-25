@@ -26,7 +26,7 @@ public class DocumentController {
     private UserService userService;
 
     @PostMapping(path = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('EMPLOYEE','TRAVEL_DESK_COORDINATOR','TRAVEL_ADMIN')")
+    @PreAuthorize("hasAnyRole('EMPLOYEE','TRAVEL_DESK','ADMIN')")
     public ResponseEntity<Document> upload(@RequestParam("file") MultipartFile file) throws IOException {
         org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         User currentUser = userService.getUserByUsername(auth.getName());
@@ -45,7 +45,7 @@ public class DocumentController {
         User currentUser = userService.getUserByUsername(auth.getName());
 
         boolean allowed = currentUser.getId().equals(doc.getOwnerId())
-                || auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_TRAVEL_ADMIN") || a.getAuthority().equals("ROLE_FINANCE_EXECUTIVE") || a.getAuthority().equals("ROLE_COMPLIANCE_OFFICER") || a.getAuthority().equals("ROLE_APPROVING_MANAGER"));
+                || auth.getAuthorities().stream().anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_FINANCE") || a.getAuthority().equals("ROLE_COMPLIANCE") || a.getAuthority().equals("ROLE_APPROVING_MANAGER"));
 
         if (!allowed) {
             return ResponseEntity.status(403).build();
