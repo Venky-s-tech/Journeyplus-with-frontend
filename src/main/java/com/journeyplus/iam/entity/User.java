@@ -56,6 +56,25 @@ public class User implements UserDetails {
     @JoinColumn(name = "grade_id", nullable = true)
     private Grade grade;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "delegate_approver_id", nullable = true)
+    @JsonIgnore
+    private User delegateApprover;
+
+    @Column(name = "delegation_start", nullable = true)
+    private LocalDateTime delegationStart;
+
+    @Column(name = "delegation_end", nullable = true)
+    private LocalDateTime delegationEnd;
+
+    public boolean isDelegationActive() {
+        LocalDateTime now = LocalDateTime.now();
+        if (delegateApprover == null || delegationStart == null || delegationEnd == null) {
+            return false;
+        }
+        return !now.isBefore(delegationStart) && !now.isAfter(delegationEnd);
+    }
+
     @Column(nullable = false)
     private boolean active = true;
 

@@ -43,21 +43,5 @@ public class AdvanceResponse {
     public LocalDate getDisbursementDate() { return disbursementDate; }
     public void setDisbursementDate(LocalDate disbursementDate) { this.disbursementDate = disbursementDate; }
 
-    // Deprecated getters and setters for backward compatibility
-    @Deprecated
-    public BigDecimal getAmount() { return requestedAmount; }
-    @Deprecated
-    public void setAmount(BigDecimal amount) { this.requestedAmount = amount; }
-    @Deprecated
-    public String getOriginalCurrency() { return currency; }
-    @Deprecated
-    public void setOriginalCurrency(String originalCurrency) { this.currency = originalCurrency; }
-    @Deprecated
-    public Long getApproverId() { return approvedById; }
-    @Deprecated
-    public void setApproverId(Long approverId) { this.approvedById = approverId; }
-    @Deprecated
-    public LocalDate getRequestDate() { return createdDate != null ? createdDate.toLocalDate() : null; }
-    @Deprecated
-    public void setRequestDate(LocalDate requestDate) { if (requestDate != null) this.createdDate = requestDate.atStartOfDay(); }
+
 }

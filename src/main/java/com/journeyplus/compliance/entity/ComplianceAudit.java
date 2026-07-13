@@ -18,7 +18,7 @@ public class ComplianceAudit {
     private Long id;
  
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "expense_line_id", nullable = false)
+    @JoinColumn(name = "expense_line_id", nullable = true)
     private ExpenseLine expenseLine;
  
     @ManyToOne(fetch = FetchType.LAZY)
@@ -40,6 +40,18 @@ public class ComplianceAudit {
  
     @Column(name = "audit_notes", columnDefinition = "TEXT")
     private String auditNotes;
+
+    // Spec claim-level fields
+    @Column(columnDefinition = "TEXT")
+    private String findings;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "audit_outcome", length = 50)
+    private AuditOutcome auditOutcome;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", length = 50)
+    private AuditStatus status;
  
     public ComplianceAudit() {}
  

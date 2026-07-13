@@ -27,6 +27,19 @@ public class ReportController {
         return ResponseEntity.ok(reportService.generateReport(title, reportType, parameters, principal.getName()));
     }
 
+    @PostMapping("/metrics")
+    public ResponseEntity<TravelReport> generateMetricsReport(
+            @RequestParam com.journeyplus.analytics.entity.ReportScope scope,
+            @RequestParam String scopeValue,
+            Principal principal) {
+        return ResponseEntity.ok(reportService.generateTravelReport(scope, scopeValue, principal.getName()));
+    }
+
+    @GetMapping("/top-travellers")
+    public ResponseEntity<List<com.journeyplus.analytics.dto.TopTravellerResponse>> getTopTravellers() {
+        return ResponseEntity.ok(reportService.getTopTravellers());
+    }
+
     @GetMapping
     public ResponseEntity<List<TravelReport>> getAllReports() {
         return ResponseEntity.ok(reportService.getAllReports());

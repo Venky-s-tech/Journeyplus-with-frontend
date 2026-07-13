@@ -150,4 +150,34 @@ public class UserService {
         User saved = userRepository.save(user);
         return new UserResponse(saved);
     }
+
+    @Transactional
+    @AuditAction(module = "IAM", action = "SET_DELEGATION")
+    public UserResponse setDelegation(Long userId, com.journeyplus.iam.dto.DelegateRequest request) {
+        log.info("Setting delegation for user ID: {}", userId);
+        User user = getUserById(userId);
+
+        if (request.getDelegateApproverId() == null) {
+            user.setDelegateApprover(null);
+            user.setDelegationStart(null);
+            user.setDelegationEnd(null);
+        } else {
+            User delegate = getUserById(request.getDelegateApproverId());
+            if (delegate.getId().equals(user.getId())) {
+                throw new IllegalArgumentException("Cannot delegate approval authority to yourself");
+            }
+            if (request.getDelegationStart() == null || request.getDelegationEnd() == null) {
+                throw new IllegalArgumentException("Start and end times are required for delegation");
+            }
+            if (request.getDelegationEnd().isBefore(request.getDelegationStart())) {
+                throw new IllegalArgumentException("Delegation end time must be after start time");
+            }
+            user.setDelegateApprover(delegate);
+            user.setDelegationStart(request.getDelegationStart());
+            user.setDelegationEnd(request.getDelegationEnd());
+        }
+
+        User saved = userRepository.save(user);
+        return new UserResponse(saved);
+    }
 }

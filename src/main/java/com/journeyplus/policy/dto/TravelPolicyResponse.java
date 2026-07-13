@@ -22,6 +22,8 @@ public class TravelPolicyResponse {
     private String status;
     private LocalDateTime createdDate;
     private LocalDateTime updatedDate;
+    private BigDecimal maxAmountPerTrip;
+    private boolean requiresVisaVerification;
 
     public TravelPolicyResponse() {}
 
@@ -39,5 +41,7 @@ public class TravelPolicyResponse {
         this.status = policy.getStatus().name();
         this.createdDate = policy.getCreatedDate();
         this.updatedDate = policy.getUpdatedDate();
+        this.maxAmountPerTrip = policy.getMaxAmountPerTrip();
+        this.requiresVisaVerification = policy.isRequiresVisaVerification();
     }
 }

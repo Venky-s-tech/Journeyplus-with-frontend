@@ -207,6 +207,18 @@ public class ItineraryController {
         String bookingRef = bookingRequest.getBookingReference();
         String bookingStatus = bookingRequest.getBookingStatus() != null ? bookingRequest.getBookingStatus() : "CONFIRMED";
 
+        // Enforce booking reference consistency
+        String existingRef = tripService.getExistingBookingReference(tripId);
+        if (existingRef != null) {
+            if (bookingRef != null && !bookingRef.trim().isEmpty()) {
+                if (!existingRef.equalsIgnoreCase(bookingRef.trim())) {
+                    throw new IllegalArgumentException("Booking reference must be the same as the existing booking reference: " + existingRef);
+                }
+            } else {
+                bookingRef = existingRef;
+            }
+        }
+
         if (bookingRef != null) leg.setBookingRef(bookingRef);
         if (bookingStatus != null) {
             // Map bookingStatus to ItineraryStatus

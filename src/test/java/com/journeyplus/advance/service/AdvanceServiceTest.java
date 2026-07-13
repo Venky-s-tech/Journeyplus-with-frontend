@@ -182,7 +182,7 @@ public class AdvanceServiceTest {
             advanceService.approveAdvanceRequest(advanceId, manager);
         });
 
-        assertEquals("Only the assigned approving manager can approve this advance", exception.getMessage());
+        assertEquals("Only the assigned approving manager or their active delegate can approve this advance", exception.getMessage());
     }
 
     @Test

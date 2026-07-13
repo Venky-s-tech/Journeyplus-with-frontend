@@ -42,6 +42,9 @@ public class AdvanceService {
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
+    @Autowired
+    private com.journeyplus.iam.repository.UserRepository userRepository;
+
     @Transactional
     @AuditAction(module = "ADVANCE", action = "CREATE_ADVANCE")
     public AdvanceRequest createAdvanceRequest(AdvanceRequest request) {
@@ -83,9 +86,12 @@ public class AdvanceService {
                 "A cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() + 
                 " has been requested by " + request.getEmployee().getUsername() + ".",
                 request.getEmployee() != null ? request.getEmployee().getId() : null,
-                request.getEmployee() != null ? request.getEmployee().getUsername() : null
+                request.getEmployee() != null ? request.getEmployee().getUsername() : null,
+                com.journeyplus.notification.entity.NotificationCategory.Advance
             ));
         }
+
+        notifyEmployeeAndFinance(saved.getEmployee().getId(), "Advance Request Submitted", "An advance request of " + saved.getRequestedAmount() + " " + saved.getCurrency() + " has been submitted.", null, null);
 
         return saved;
     }
@@ -135,25 +141,29 @@ public class AdvanceService {
             throw new IllegalStateException("Only REQUESTED advance requests can be approved");
         }
 
-        // Enforce that the approver is the assigned manager of the trip request (or Admin)
+        // Enforce that the approver is the assigned manager of the trip request or their active delegate
         TripRequest trip = request.getTripRequest();
-        if (trip.getApprover() == null || !trip.getApprover().getId().equals(approver.getId())) {
-            throw new org.springframework.security.access.AccessDeniedException("Only the assigned approving manager can approve this advance");
+        boolean isAssignedApprover = trip.getApprover() != null && trip.getApprover().getId().equals(approver.getId());
+        boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null 
+                && trip.getApprover().getDelegateApprover().getId().equals(approver.getId()) 
+                && trip.getApprover().isDelegationActive();
+
+        if (!isAssignedApprover && !isDelegateApprover) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the assigned approving manager or their active delegate can approve this advance");
         }
 
         request.setStatus(AdvanceStatus.APPROVED);
         request.setApprovedBy(approver);
         AdvanceRequest saved = advanceRequestRepository.save(request);
 
-        // Notify Employee
-        eventPublisher.publishEvent(new StatusChangeEvent(
+        notifyEmployeeAndFinance(
             request.getEmployee().getId(),
             "Advance Request Approved",
             "Your cash advance request for " + request.getRequestedAmount() + " " + request.getCurrency() + 
             " has been approved by " + approver.getUsername() + ".",
             approver != null ? approver.getId() : null,
             approver != null ? approver.getUsername() : null
-        ));
+        );
 
         return saved;
     }
@@ -173,15 +183,14 @@ public class AdvanceService {
         request.setDisbursementDate(LocalDate.now());
         AdvanceRequest saved = advanceRequestRepository.save(request);
 
-        // Notify Employee
-        eventPublisher.publishEvent(new StatusChangeEvent(
+        notifyEmployeeAndFinance(
             request.getEmployee().getId(),
             "Advance Disbursed",
             "Your cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() + 
             " has been disbursed to your account.",
             null,
             null
-        ));
+        );
 
         return saved;
     }
@@ -200,15 +209,14 @@ public class AdvanceService {
         request.setStatus(AdvanceStatus.FORFEITED);
         AdvanceRequest saved = advanceRequestRepository.save(request);
 
-        // Notify Employee
-        eventPublisher.publishEvent(new StatusChangeEvent(
+        notifyEmployeeAndFinance(
             request.getEmployee().getId(),
             "Advance Request Forfeited",
             "Your cash advance request of " + request.getRequestedAmount() + " " + request.getCurrency() + 
             " has been forfeited.",
             null,
             null
-        ));
+        );
 
         return saved;
     }
@@ -258,15 +266,14 @@ public class AdvanceService {
             request.setStatus(AdvanceStatus.SETTLED);
             advanceRequestRepository.save(request);
 
-            // Notify Employee
-            eventPublisher.publishEvent(new StatusChangeEvent(
+            notifyEmployeeAndFinance(
                 request.getEmployee().getId(),
                 "Advance Request Settled",
                 "Your cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() + 
                 " has been successfully settled.",
                 null,
                 null
-            ));
+            );
         }
 
         return saved;
@@ -359,5 +366,38 @@ public class AdvanceService {
 
     public List<AdvanceRequest> filterAdvances(AdvanceStatus status, Long employeeId, Long tripId, String currency) {
         return advanceRequestRepository.filterAdvances(status, employeeId, tripId, currency);
+    }
+
+    private void notifyEmployeeAndFinance(Long employeeId, String title, String message, Long actorId, String actorName) {
+        try {
+            eventPublisher.publishEvent(new StatusChangeEvent(
+                employeeId,
+                title,
+                message,
+                actorId,
+                actorName,
+                com.journeyplus.notification.entity.NotificationCategory.Advance
+            ));
+        } catch (Exception e) {
+            log.warn("Failed to notify employee: {}", e.getMessage());
+        }
+
+        try {
+            List<User> financeUsers = userRepository.findAll().stream()
+                .filter(u -> u.getRole() == com.journeyplus.iam.entity.Role.FINANCE)
+                .toList();
+            for (User fin : financeUsers) {
+                eventPublisher.publishEvent(new StatusChangeEvent(
+                    fin.getId(),
+                    title,
+                    message,
+                    actorId,
+                    actorName,
+                    com.journeyplus.notification.entity.NotificationCategory.Advance
+                ));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to notify Finance users: {}", e.getMessage());
+        }
     }
 }

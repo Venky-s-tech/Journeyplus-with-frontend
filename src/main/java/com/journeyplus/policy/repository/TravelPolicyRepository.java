@@ -5,8 +5,6 @@ import com.journeyplus.policy.entity.PolicyStatus;
 import com.journeyplus.policy.entity.TravelPolicy;
 import com.journeyplus.policy.entity.TravelType;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -18,13 +16,24 @@ public interface TravelPolicyRepository extends JpaRepository<TravelPolicy, Long
 
     Optional<TravelPolicy> findByGrade_IdAndTravelTypeAndStatus(String gradeId, TravelType travelType, PolicyStatus status);
 
-    @Query("SELECT p FROM TravelPolicy p WHERE " +
-           "(:gradeId IS NULL OR p.grade.id = :gradeId) AND " +
-           "(:travelType IS NULL OR p.travelType = :travelType) AND " +
-           "(:status IS NULL OR p.status = :status)")
-    List<TravelPolicy> searchPolicies(
-            @Param("gradeId") String gradeId,
-            @Param("travelType") TravelType travelType,
-            @Param("status") PolicyStatus status
-    );
+    @org.springframework.data.jpa.repository.Query("SELECT p FROM TravelPolicy p WHERE p.grade.id = :gradeId AND p.travelType = :travelType AND p.status = com.journeyplus.policy.entity.PolicyStatus.ACTIVE AND p.effectiveDate <= :tripDate ORDER BY p.effectiveDate DESC")
+    List<TravelPolicy> findEffectivePoliciesForDate(
+            @org.springframework.data.repository.query.Param("gradeId") String gradeId, 
+            @org.springframework.data.repository.query.Param("travelType") TravelType travelType, 
+            @org.springframework.data.repository.query.Param("tripDate") java.time.LocalDateTime tripDate);
+
+    List<TravelPolicy> findListByGrade_IdAndTravelTypeAndStatus(String gradeId, TravelType travelType, PolicyStatus status);
+
+    default List<TravelPolicy> searchPolicies(
+            String gradeId,
+            TravelType travelType,
+            PolicyStatus status
+    ) {
+        return findListByGrade_IdAndTravelTypeAndStatus(gradeId, travelType, status);
+    }
 }
+
+
+
+
+

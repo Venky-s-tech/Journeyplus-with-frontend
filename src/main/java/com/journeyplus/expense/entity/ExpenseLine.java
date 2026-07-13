@@ -62,6 +62,13 @@ public class ExpenseLine {
     @Column(name = "compliance_remarks", columnDefinition = "TEXT")
     private String complianceRemarks;
  
+    @Column(name = "policy_compliant", nullable = false)
+    private boolean policyCompliant = true;
+ 
+    @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+    @Column(nullable = false, length = 50)
+    private ExpenseLineStatus status = ExpenseLineStatus.INCLUDED;
+ 
     public ExpenseLine() {}
  
     public ExpenseLine(ExpenseClaim expenseClaim, LocalDate expenseDate, String category, BigDecimal amount, String originalCurrency, BigDecimal usdEquivalent, String receiptPath) {
@@ -73,5 +80,7 @@ public class ExpenseLine {
         this.usdEquivalent = usdEquivalent;
         this.receiptPath = receiptPath;
         this.policyComplianceStatus = "COMPLIANT";
+        this.policyCompliant = true;
+        this.status = ExpenseLineStatus.INCLUDED;
     }
 }

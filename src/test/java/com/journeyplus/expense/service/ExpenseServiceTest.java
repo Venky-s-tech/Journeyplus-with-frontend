@@ -30,6 +30,10 @@ import com.journeyplus.expense.repository.ReimbursementRepository;
 import com.journeyplus.iam.entity.Role;
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.trip.entity.TripRequest;
+import com.journeyplus.trip.entity.TripStatus;
+import com.journeyplus.trip.repository.TripRequestRepository;
+import com.journeyplus.advance.repository.AdvanceRequestRepository;
+import com.journeyplus.advance.repository.AdvanceSettlementRepository;
 
 @ExtendWith(MockitoExtension.class)
 public class ExpenseServiceTest {
@@ -44,20 +48,35 @@ public class ExpenseServiceTest {
     private ReimbursementRepository reimbursementRepository;
 
     @Mock
+    private AdvanceRequestRepository advanceRequestRepository;
+
+    @Mock
     private PolicyComplianceEngine complianceEngine;
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private TripRequestRepository tripRequestRepository;
+
+    @Mock
+    private AdvanceSettlementRepository advanceSettlementRepository;
 
     @InjectMocks
     private ExpenseService expenseService;
 
     @Test
     public void createExpenseClaim_Success() {
+        TripRequest trip = new TripRequest();
+        trip.setId(100L);
+        trip.setStatus(TripStatus.COMPLETED);
+
         ExpenseClaim claim = new ExpenseClaim();
         claim.setClaimTitle("Conference Trip");
         claim.setOriginalCurrency("USD");
+        claim.setTripRequest(trip);
 
+        when(tripRequestRepository.findById(100L)).thenReturn(Optional.of(trip));
         when(expenseClaimRepository.save(any(ExpenseClaim.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ExpenseClaim created = expenseService.createExpenseClaim(claim);
@@ -84,6 +103,7 @@ public class ExpenseServiceTest {
         line.setOriginalCurrency("EUR"); // Conversion is 1.08 -> 108.00 USD
 
         when(expenseClaimRepository.findById(claimId)).thenReturn(Optional.of(claim));
+        when(expenseLineRepository.findByExpenseClaim_Id(claimId)).thenReturn(Arrays.asList(line));
         
         // Mock save of the line first
         when(expenseLineRepository.save(any(ExpenseLine.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -247,8 +267,6 @@ public class ExpenseServiceTest {
         claim.setId(claimId);
         claim.setStatus(ExpenseStatus.SUBMITTED);
 
-        when(expenseClaimRepository.findById(claimId)).thenReturn(Optional.of(claim));
-
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
             expenseService.approveOrRejectExpenseClaim(claimId, ExpenseStatus.DRAFT, "Draft?!", new User());
         });
@@ -328,5 +346,79 @@ public class ExpenseServiceTest {
 
         List<ExpenseLine> result = expenseService.getLinesByClaim(1L);
         assertEquals(1, result.size());
+    }
+
+    @Test
+    public void createExpenseClaim_WithAdvanceAdjustment_Success() {
+        User employee = new User("empUser", "emp@journeyplus.com", "pass", Role.EMPLOYEE, "IT");
+        employee.setId(10L);
+
+        TripRequest trip = new TripRequest();
+        trip.setId(100L);
+        trip.setStatus(TripStatus.COMPLETED);
+
+        ExpenseClaim claim = new ExpenseClaim(trip, employee, "Client Dinner", "USD");
+        claim.setTotalAmount(new BigDecimal("500.00"));
+        claim.setUsdEquivalent(new BigDecimal("500.00"));
+
+        com.journeyplus.advance.entity.AdvanceRequest advance = new com.journeyplus.advance.entity.AdvanceRequest();
+        advance.setRequestedAmount(new BigDecimal("200.00"));
+        advance.setCurrency("USD");
+        advance.setUsdEquivalent(new BigDecimal("200.00"));
+        advance.setStatus(com.journeyplus.advance.entity.AdvanceStatus.DISBURSED);
+
+        when(tripRequestRepository.findById(100L)).thenReturn(Optional.of(trip));
+        when(advanceRequestRepository.findByTripRequest_Id(100L)).thenReturn(Arrays.asList(advance));
+        when(expenseClaimRepository.save(any(ExpenseClaim.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ExpenseClaim saved = expenseService.createExpenseClaim(claim, null);
+
+        assertNotNull(saved);
+        assertEquals(new BigDecimal("200.00"), saved.getAdvanceAdjusted());
+        assertEquals(new BigDecimal("-200.00"), saved.getNetReimbursable());
+    }
+
+    @Test
+    public void payReimbursement_WithAdvanceAdjustment_Success() {
+        Long claimId = 1L;
+        User employee = new User("empUser", "emp@journeyplus.com", "pass", Role.EMPLOYEE, "IT");
+        employee.setId(10L);
+
+        TripRequest trip = new TripRequest();
+        trip.setId(100L);
+
+        ExpenseClaim claim = new ExpenseClaim();
+        claim.setId(claimId);
+        claim.setStatus(ExpenseStatus.APPROVED);
+        claim.setClaimTitle("Conference");
+        claim.setEmployee(employee);
+        claim.setTripRequest(trip);
+        claim.setTotalAmount(new BigDecimal("500.00"));
+        claim.setOriginalCurrency("USD");
+        claim.setUsdEquivalent(new BigDecimal("500.00"));
+
+        com.journeyplus.advance.entity.AdvanceRequest advance = new com.journeyplus.advance.entity.AdvanceRequest();
+        advance.setRequestedAmount(new BigDecimal("150.00"));
+        advance.setCurrency("USD");
+        advance.setUsdEquivalent(new BigDecimal("150.00"));
+        advance.setStatus(com.journeyplus.advance.entity.AdvanceStatus.DISBURSED);
+
+        when(advanceRequestRepository.findByTripRequest_Id(100L)).thenReturn(Arrays.asList(advance));
+        when(expenseClaimRepository.findById(claimId)).thenReturn(Optional.of(claim));
+        when(expenseClaimRepository.save(any(ExpenseClaim.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Reimbursement reimbursement = new Reimbursement();
+        reimbursement.setPaymentMethod("BANK_TRANSFER");
+        reimbursement.setTransactionReference("REF12345");
+
+        ExpenseClaim paidClaim = expenseService.payReimbursement(claimId, reimbursement);
+
+        assertNotNull(paidClaim);
+        assertEquals(ExpenseStatus.PAID, paidClaim.getStatus());
+        assertEquals(new BigDecimal("150.00"), paidClaim.getAdvanceAdjusted());
+        assertEquals(new BigDecimal("350.00"), paidClaim.getNetReimbursable());
+
+        verify(reimbursementRepository, times(1)).save(reimbursement);
+        assertEquals(new BigDecimal("350.00"), reimbursement.getAmount());
     }
 }

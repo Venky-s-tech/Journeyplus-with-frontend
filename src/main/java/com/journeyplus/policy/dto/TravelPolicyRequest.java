@@ -43,4 +43,8 @@ public class TravelPolicyRequest {
     private BigDecimal localConveyanceLimit;
 
     private PolicyStatus status = PolicyStatus.ACTIVE;
+
+    private BigDecimal maxAmountPerTrip;
+
+    private Boolean requiresVisaVerification = false;
 }

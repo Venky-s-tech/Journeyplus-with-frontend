@@ -24,6 +24,7 @@ import com.journeyplus.expense.repository.ExpenseLineRepository;
 import com.journeyplus.expense.repository.ReimbursementRepository;
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.expense.dto.ExpenseLineRequest;
+import com.journeyplus.advance.repository.AdvanceRequestRepository;
 
 @Service
 public class ExpenseService {
@@ -38,6 +39,15 @@ public class ExpenseService {
 
     @Autowired
     private ReimbursementRepository reimbursementRepository;
+
+    @Autowired
+    private AdvanceRequestRepository advanceRequestRepository;
+
+    @Autowired
+    private com.journeyplus.trip.repository.TripRequestRepository tripRequestRepository;
+
+    @Autowired
+    private com.journeyplus.advance.repository.AdvanceSettlementRepository advanceSettlementRepository;
 
     @Autowired
     private PolicyComplianceEngine complianceEngine;
@@ -58,6 +68,57 @@ public class ExpenseService {
         };
     }
 
+    public void calculateAdvanceAndNetReimbursable(ExpenseClaim claim) {
+        if (claim.getTripRequest() == null) {
+            claim.setAdvanceAdjusted(BigDecimal.ZERO);
+            claim.setNetReimbursable(claim.getTotalAmount());
+            return;
+        }
+
+        // Find all advance requests for the trip
+        List<com.journeyplus.advance.entity.AdvanceRequest> advances = 
+            advanceRequestRepository.findByTripRequest_Id(claim.getTripRequest().getId());
+
+        BigDecimal totalAdvanceUsd = BigDecimal.ZERO;
+        for (com.journeyplus.advance.entity.AdvanceRequest adv : advances) {
+            if (adv.getStatus() == com.journeyplus.advance.entity.AdvanceStatus.DISBURSED || 
+                adv.getStatus() == com.journeyplus.advance.entity.AdvanceStatus.SETTLED) {
+                // Check if there are settlements for this advance request
+                List<com.journeyplus.advance.entity.AdvanceSettlement> settlements = 
+                    advanceSettlementRepository.findByAdvanceRequest_Id(adv.getId());
+                if (!settlements.isEmpty()) {
+                    for (com.journeyplus.advance.entity.AdvanceSettlement set : settlements) {
+                        BigDecimal rate = getExchangeRateToUsd(adv.getCurrency());
+                        BigDecimal usd = set.getAmountUtilised().multiply(rate);
+                        totalAdvanceUsd = totalAdvanceUsd.add(usd);
+                    }
+                } else {
+                    // Fallback to full requested amount if not settled yet
+                    if (adv.getUsdEquivalent() != null) {
+                        totalAdvanceUsd = totalAdvanceUsd.add(adv.getUsdEquivalent());
+                    } else {
+                        BigDecimal rate = getExchangeRateToUsd(adv.getCurrency());
+                        BigDecimal usd = adv.getRequestedAmount().multiply(rate);
+                        totalAdvanceUsd = totalAdvanceUsd.add(usd);
+                    }
+                }
+            }
+        }
+
+        // Convert totalAdvanceUsd to claim's original currency
+        BigDecimal claimRate = getExchangeRateToUsd(claim.getOriginalCurrency());
+        BigDecimal totalAdvanceClaimCurrency = BigDecimal.ZERO;
+        if (claimRate.compareTo(BigDecimal.ZERO) > 0) {
+            totalAdvanceClaimCurrency = totalAdvanceUsd.divide(claimRate, 2, RoundingMode.HALF_UP);
+        }
+
+        claim.setAdvanceAdjusted(totalAdvanceClaimCurrency);
+
+        // netReimbursable = totalAmount - advanceAdjusted
+        BigDecimal net = claim.getTotalAmount().subtract(totalAdvanceClaimCurrency);
+        claim.setNetReimbursable(net);
+    }
+
     @Transactional
     @AuditAction(module = "EXPENSE", action = "CREATE_EXPENSE_CLAIM")
     public ExpenseClaim createExpenseClaim(ExpenseClaim claim) {
@@ -68,16 +129,24 @@ public class ExpenseService {
     @AuditAction(module = "EXPENSE", action = "CREATE_EXPENSE_CLAIM")
     public ExpenseClaim createExpenseClaim(ExpenseClaim claim, List<ExpenseLineRequest> lineRequests) {
         log.info("Attempting to create expense claim with title: '{}'", claim.getClaimTitle());
+        if (claim.getTripRequest() == null || claim.getTripRequest().getId() == null) {
+            throw new IllegalArgumentException("Trip request is required for creating an expense claim");
+        }
+        com.journeyplus.trip.entity.TripRequest trip = tripRequestRepository.findById(claim.getTripRequest().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Associated Trip Request not found"));
+        if (trip.getStatus() != com.journeyplus.trip.entity.TripStatus.COMPLETED) {
+            throw new IllegalStateException("Expense claims can only be raised against COMPLETED trip requests");
+        }
+        claim.setTripRequest(trip);
+
         claim.setStatus(ExpenseStatus.DRAFT);
         claim.setTotalAmount(BigDecimal.ZERO);
         claim.setUsdEquivalent(BigDecimal.ZERO);
+        calculateAdvanceAndNetReimbursable(claim);
         ExpenseClaim saved = expenseClaimRepository.save(claim);
         log.info("Expense claim successfully created with ID: {}", saved.getId());
 
         if (lineRequests != null && !lineRequests.isEmpty()) {
-            BigDecimal totalAmount = BigDecimal.ZERO;
-            BigDecimal totalUsdEquivalent = BigDecimal.ZERO;
-
             for (ExpenseLineRequest lineReq : lineRequests) {
                 ExpenseLine line = new ExpenseLine();
                 line.setExpenseDate(lineReq.getExpenseDate());
@@ -86,53 +155,28 @@ public class ExpenseService {
                 line.setOriginalCurrency(lineReq.getOriginalCurrency());
                 line.setReceiptPath(lineReq.getReceiptPath());
 
-                // Defensive: do not trust client-supplied identifiers or compliance fields
                 line.setId(null);
-                // Always associate the persisted claim using path variable
                 line.setExpenseClaim(saved);
-                // Ensure a non-null policy compliance status before persisting to avoid DB NOT NULL constraint
-                if (line.getPolicyComplianceStatus() == null) {
-                    line.setPolicyComplianceStatus("COMPLIANT");
-                }
-                // Clear any client-supplied compliance remarks; compliance engine will set them as needed
+                line.setPolicyComplianceStatus("COMPLIANT");
                 line.setComplianceRemarks(null);
 
-                // Validate amount and currency
                 if (line.getAmount() == null) {
-                    log.warn("Failed to add line: Expense line amount is required");
                     throw new IllegalArgumentException("Expense line amount is required");
                 }
                 if (line.getOriginalCurrency() == null) {
                     line.setOriginalCurrency(saved.getOriginalCurrency());
                 }
 
-                // Multi-currency calculation
                 BigDecimal rate = getExchangeRateToUsd(line.getOriginalCurrency());
                 BigDecimal usdEquivalent = line.getAmount().multiply(rate).setScale(2, RoundingMode.HALF_UP);
                 line.setUsdEquivalent(usdEquivalent);
-                log.info("Calculated USD equivalent for line: {} USD (rate: {})", usdEquivalent, rate);
 
-                // 1) Persist ExpenseLine first so subsequent ComplianceAudit/PolicyException can reference its DB id
                 ExpenseLine savedLine = expenseLineRepository.save(line);
-
-                // 2) Run policy compliance checks
-                log.info("Running compliance engine check for line ID: {}", savedLine.getId());
                 complianceEngine.runComplianceCheck(savedLine);
-
-                // 3) Persist any changes made by compliance engine
-                savedLine = expenseLineRepository.save(savedLine);
-                log.info("Compliance check completed for line ID: {}. Status: {}, Remarks: '{}'",
-                        savedLine.getId(), savedLine.getPolicyComplianceStatus(), savedLine.getComplianceRemarks());
-
-                totalAmount = totalAmount.add(savedLine.getAmount());
-                totalUsdEquivalent = totalUsdEquivalent.add(savedLine.getUsdEquivalent());
+                expenseLineRepository.save(savedLine);
             }
-
-            saved.setTotalAmount(totalAmount);
-            saved.setUsdEquivalent(totalUsdEquivalent);
-            saved = expenseClaimRepository.save(saved);
-            log.info("Updated claim ID: {} totals after bulk save -> Original total: {} {}, USD equivalent total: {} USD",
-                    saved.getId(), totalAmount, saved.getOriginalCurrency(), totalUsdEquivalent);
+            recomputeClaimTotals(saved);
+            saved = expenseClaimRepository.findById(saved.getId()).orElse(saved);
         }
 
         return saved;
@@ -145,63 +189,49 @@ public class ExpenseService {
                 line.getCategory(), line.getAmount(), line.getOriginalCurrency(), claimId);
 
         ExpenseClaim claim = expenseClaimRepository.findById(claimId)
-                .orElseThrow(() -> {
-                    log.warn("Failed to add line: Expense claim ID {} not found", claimId);
-                    return new IllegalArgumentException("Expense claim not found");
-                });
+                .orElseThrow(() -> new IllegalArgumentException("Expense claim not found"));
 
         if (claim.getStatus() != ExpenseStatus.DRAFT) {
-            log.warn("Failed to add line: Claim ID {} is in state {}, only DRAFT allowed", claimId, claim.getStatus());
             throw new IllegalStateException("Can only add expense lines to DRAFT claims");
         }
 
-        // Defensive: do not trust client-supplied identifiers or compliance fields
         line.setId(null);
-        // Always associate the persisted claim using path variable
         line.setExpenseClaim(claim);
-        // Ensure a non-null policy compliance status before persisting to avoid DB NOT NULL constraint
-        if (line.getPolicyComplianceStatus() == null) {
-            line.setPolicyComplianceStatus("COMPLIANT");
-        }
-        // Clear any client-supplied compliance remarks; compliance engine will set them as needed
+        line.setPolicyComplianceStatus("COMPLIANT");
         line.setComplianceRemarks(null);
 
-        // Validate amount and currency
         if (line.getAmount() == null) {
-            log.warn("Failed to add line: Expense line amount is required");
             throw new IllegalArgumentException("Expense line amount is required");
         }
         if (line.getOriginalCurrency() == null) line.setOriginalCurrency(claim.getOriginalCurrency());
 
-        // Multi-currency calculation
         BigDecimal rate = getExchangeRateToUsd(line.getOriginalCurrency());
         BigDecimal usdEquivalent = line.getAmount().multiply(rate).setScale(2, RoundingMode.HALF_UP);
         line.setUsdEquivalent(usdEquivalent);
-        log.info("Calculated USD equivalent for line: {} USD (rate: {})", usdEquivalent, rate);
 
-        // 1) Persist ExpenseLine first so subsequent ComplianceAudit/PolicyException can reference its DB id
         ExpenseLine savedLine = expenseLineRepository.save(line);
-
-        // 2) Run policy compliance checks (this will create ComplianceAudit and PolicyException records as needed)
-        // The compliance engine expects an ExpenseLine with an expense claim and usdEquivalent set
-        log.info("Running compliance engine check for line ID: {}", savedLine.getId());
         complianceEngine.runComplianceCheck(savedLine);
-
-        // 3) Persist any changes made by the compliance engine (policyComplianceStatus, complianceRemarks)
         savedLine = expenseLineRepository.save(savedLine);
-        log.info("Compliance check completed for line ID: {}. Status: {}, Remarks: '{}'", 
-                savedLine.getId(), savedLine.getPolicyComplianceStatus(), savedLine.getComplianceRemarks());
 
-        // 4) Update total claim sums after the line has been recorded
-        BigDecimal originalTotal = claim.getTotalAmount().add(line.getAmount());
-        BigDecimal usdTotal = claim.getUsdEquivalent().add(usdEquivalent);
-        claim.setTotalAmount(originalTotal);
-        claim.setUsdEquivalent(usdTotal);
-        expenseClaimRepository.save(claim);
-        log.info("Updated claim ID: {} totals -> Original total: {} {}, USD equivalent total: {} USD", 
-                claim.getId(), originalTotal, claim.getOriginalCurrency(), usdTotal);
-
+        recomputeClaimTotals(claim);
         return savedLine;
+    }
+
+    @Transactional
+    public void recomputeClaimTotals(ExpenseClaim claim) {
+        List<ExpenseLine> lines = expenseLineRepository.findByExpenseClaim_Id(claim.getId());
+        BigDecimal totalClaimed = BigDecimal.ZERO;
+        BigDecimal usdTotal = BigDecimal.ZERO;
+        for (ExpenseLine l : lines) {
+            if (l.getStatus() == com.journeyplus.expense.entity.ExpenseLineStatus.INCLUDED) {
+                totalClaimed = totalClaimed.add(l.getAmount());
+                usdTotal = usdTotal.add(l.getUsdEquivalent());
+            }
+        }
+        claim.setTotalAmount(totalClaimed);
+        claim.setUsdEquivalent(usdTotal);
+        calculateAdvanceAndNetReimbursable(claim);
+        expenseClaimRepository.save(claim);
     }
 
     @Transactional
@@ -234,7 +264,8 @@ public class ExpenseService {
                 "An expense claim titled '" + claim.getClaimTitle() + "' has been submitted by " + 
                 claim.getEmployee().getUsername() + " and is awaiting your review.",
                 claim.getEmployee() != null ? claim.getEmployee().getId() : null,
-                claim.getEmployee() != null ? claim.getEmployee().getUsername() : null
+                claim.getEmployee() != null ? claim.getEmployee().getUsername() : null,
+                com.journeyplus.notification.entity.NotificationCategory.ExpenseClaim
             ));
         } else {
             log.warn("No approving manager found for trip request associated with claim ID: {}", claimId);
@@ -247,6 +278,11 @@ public class ExpenseService {
     @AuditAction(module = "EXPENSE", action = "APPROVE_REJECT_EXPENSE_CLAIM")
     public ExpenseClaim approveOrRejectExpenseClaim(Long claimId, ExpenseStatus newStatus, String comments, User manager) {
         log.info("Manager '{}' attempting to set status of claim ID: {} to {}", manager.getUsername(), claimId, newStatus);
+        
+        if (newStatus != ExpenseStatus.APPROVED && newStatus != ExpenseStatus.REJECTED) {
+            throw new IllegalArgumentException("Target status must be APPROVED or REJECTED");
+        }
+
         ExpenseClaim claim = expenseClaimRepository.findById(claimId)
                 .orElseThrow(() -> {
                     log.warn("Failed to review: Expense claim ID {} not found", claimId);
@@ -258,9 +294,17 @@ public class ExpenseService {
             throw new IllegalStateException("Only SUBMITTED claims can be approved or rejected");
         }
 
-        if (newStatus != ExpenseStatus.APPROVED && newStatus != ExpenseStatus.REJECTED) {
-            log.warn("Failed to review: Invalid target status {}", newStatus);
-            throw new IllegalArgumentException("Target status must be APPROVED or REJECTED");
+        // Validate that the manager is the assigned approver or their active delegate
+        com.journeyplus.trip.entity.TripRequest trip = claim.getTripRequest();
+        if (trip != null) {
+            boolean isAssignedApprover = trip.getApprover() != null && trip.getApprover().getId().equals(manager.getId());
+            boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null 
+                    && trip.getApprover().getDelegateApprover().getId().equals(manager.getId()) 
+                    && trip.getApprover().isDelegationActive();
+
+            if (!isAssignedApprover && !isDelegateApprover) {
+                throw new org.springframework.security.access.AccessDeniedException("Only the assigned approving manager or their active delegate can approve or reject this expense claim");
+            }
         }
 
         claim.setStatus(newStatus);
@@ -275,7 +319,8 @@ public class ExpenseService {
             "Expense Claim " + newStatus.name(),
             "Your expense claim '" + claim.getClaimTitle() + "' has been " + newStatus.name().toLowerCase() + ".",
             manager != null ? manager.getId() : null,
-            manager != null ? manager.getUsername() : null
+            manager != null ? manager.getUsername() : null,
+            com.journeyplus.notification.entity.NotificationCategory.ExpenseClaim
         ));
 
         return saved;
@@ -296,27 +341,48 @@ public class ExpenseService {
             throw new IllegalStateException("Reimbursements can only be disbursed for APPROVED claims");
         }
 
-        claim.setStatus(ExpenseStatus.PAID);
+        calculateAdvanceAndNetReimbursable(claim);
+
+        BigDecimal amountPaid = reimbursement.getAmount();
+        if (amountPaid == null || amountPaid.compareTo(BigDecimal.ZERO) <= 0) {
+            amountPaid = claim.getNetReimbursable();
+        }
+
+        reimbursement.setStatus("PROCESSED");
+
+        if ("PROCESSED".equalsIgnoreCase(reimbursement.getStatus())) {
+            if (amountPaid.compareTo(claim.getNetReimbursable()) >= 0) {
+                claim.setStatus(ExpenseStatus.PAID);
+            } else {
+                claim.setStatus(ExpenseStatus.PARTIALLY_PAID);
+            }
+        }
+
         ExpenseClaim savedClaim = expenseClaimRepository.save(claim);
 
         reimbursement.setExpenseClaim(savedClaim);
         reimbursement.setRecipient(savedClaim.getEmployee());
-        reimbursement.setAmount(savedClaim.getTotalAmount());
+        reimbursement.setAmount(amountPaid);
         reimbursement.setOriginalCurrency(savedClaim.getOriginalCurrency());
-        reimbursement.setUsdEquivalent(savedClaim.getUsdEquivalent());
+        BigDecimal rate = getExchangeRateToUsd(savedClaim.getOriginalCurrency());
+        reimbursement.setUsdEquivalent(amountPaid.multiply(rate).setScale(2, RoundingMode.HALF_UP));
         reimbursement.setPaymentDate(LocalDate.now());
+        if (reimbursement.getTransactionReference() == null) {
+            reimbursement.setTransactionReference("TXN-" + System.currentTimeMillis());
+        }
         reimbursementRepository.save(reimbursement);
         log.info("Reimbursement record created successfully for claim ID: {}, payment method: {}", claimId, reimbursement.getPaymentMethod());
 
-        // Notify Employee (no explicit actor available for payment operation)
-        log.info("Publishing status event to employee ID: {} for PAID claim ID: {}", claim.getEmployee().getId(), claimId);
+        // Notify Employee
+        log.info("Publishing status event to employee ID: {} for claim ID: {} with status {}", claim.getEmployee().getId(), claimId, claim.getStatus());
         eventPublisher.publishEvent(new StatusChangeEvent(
             claim.getEmployee().getId(),
-            "Expense Claim Paid",
-            "Your expense claim '" + claim.getClaimTitle() + "' has been fully paid via " + 
-            reimbursement.getPaymentMethod() + ".",
+            "Expense Claim " + claim.getStatus().name(),
+            "Your expense claim '" + claim.getClaimTitle() + "' has been paid via " + 
+            reimbursement.getPaymentMethod() + ". Status: " + claim.getStatus().name().toLowerCase().replace("_", " "),
             null,
-            null
+            null,
+            com.journeyplus.notification.entity.NotificationCategory.ExpenseClaim
         ));
 
         return savedClaim;

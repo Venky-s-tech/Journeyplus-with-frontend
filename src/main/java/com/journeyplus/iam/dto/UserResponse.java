@@ -20,6 +20,10 @@ public class UserResponse {
     private LocalDateTime createdDate;
     private LocalDateTime updatedDate;
 
+    private Long delegateApproverId;
+    private LocalDateTime delegationStart;
+    private LocalDateTime delegationEnd;
+
     public UserResponse() {}
 
     public UserResponse(User user) {
@@ -34,5 +38,8 @@ public class UserResponse {
         this.status = user.getStatus();
         this.createdDate = user.getCreatedDate();
         this.updatedDate = user.getUpdatedDate();
+        this.delegateApproverId = user.getDelegateApprover() != null ? user.getDelegateApprover().getId() : null;
+        this.delegationStart = user.getDelegationStart();
+        this.delegationEnd = user.getDelegationEnd();
     }
 }

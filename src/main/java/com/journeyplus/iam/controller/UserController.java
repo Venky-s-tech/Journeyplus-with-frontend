@@ -95,4 +95,12 @@ public class UserController {
         UserResponse deactivated = userService.deactivateUser(id);
         return ResponseEntity.ok(deactivated);
     }
+
+    @PostMapping("/delegate")
+    public ResponseEntity<UserResponse> setDelegation(
+            @Valid @RequestBody com.journeyplus.iam.dto.DelegateRequest request,
+            @AuthenticationPrincipal User currentUser) {
+        UserResponse updated = userService.setDelegation(currentUser.getId(), request);
+        return ResponseEntity.ok(updated);
+    }
 }

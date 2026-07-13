@@ -11,6 +11,5 @@ public interface PolicyExceptionRepository extends JpaRepository<PolicyException
     List<PolicyException> findByExpenseLineId(Long expenseLineId);
     List<PolicyException> findByApprovalStatus(String approvalStatus);
 
-    // Correct nested property path for Spring Data JPA (expenseLine -> id)
     List<PolicyException> findByExpenseLine_Id(Long expenseLineId);
 }

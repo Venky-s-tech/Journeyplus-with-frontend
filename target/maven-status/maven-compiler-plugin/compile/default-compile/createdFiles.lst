@@ -17,7 +17,9 @@ com\journeyplus\expense\entity\ExpenseClaim.class
 com\journeyplus\policy\entity\HotelCategory.class
 com\journeyplus\document\entity\Document.class
 com\journeyplus\iam\controller\UserController.class
+com\journeyplus\notification\entity\NotificationStatus.class
 com\journeyplus\trip\dto\VisaRequirementResponse.class
+com\journeyplus\notification\entity\NotificationCategory.class
 com\journeyplus\policy\service\PolicyService.class
 com\journeyplus\trip\controller\TripRequestController.class
 com\journeyplus\iam\controller\AuthController.class
@@ -28,6 +30,7 @@ com\journeyplus\trip\dto\TripResponse.class
 com\journeyplus\config\SecurityConfig.class
 com\journeyplus\iam\dto\WhoAmIResponse.class
 com\journeyplus\iam\controller\AdminUserApprovalController.class
+com\journeyplus\analytics\dto\TopTravellerResponse.class
 com\journeyplus\analytics\service\ReportService.class
 com\journeyplus\trip\dto\VisaStatus.class
 com\journeyplus\common\controller\RestExceptionHandler.class
@@ -64,6 +67,8 @@ com\journeyplus\iam\dto\RoleUpdateRequest.class
 com\journeyplus\iam\repository\GradeRepository.class
 com\journeyplus\advance\entity\SettlementStatus.class
 com\journeyplus\policy\controller\TravelPolicyController.class
+com\journeyplus\analytics\entity\ReportScope.class
+com\journeyplus\expense\entity\ExpenseLineStatus.class
 com\journeyplus\compliance\entity\PolicyException.class
 com\journeyplus\advance\dto\AdvanceRequestInput.class
 com\journeyplus\JourneyPlusApplication.class
@@ -103,11 +108,13 @@ com\journeyplus\policy\entity\CityTierType.class
 com\journeyplus\trip\dto\ItineraryLegInput.class
 com\journeyplus\document\storage\LocalStorageService.class
 com\journeyplus\trip\service\TripService.class
+com\journeyplus\common\KeyGenerator.class
 com\journeyplus\iam\service\UserService.class
 com\journeyplus\policy\entity\TravelPolicy.class
 com\journeyplus\trip\dto\SimpleUserDTO.class
 com\journeyplus\document\storage\StorageService.class
 com\journeyplus\iam\dto\AuthResponse.class
+com\journeyplus\compliance\entity\AuditOutcome.class
 com\journeyplus\expense\entity\Reimbursement.class
 com\journeyplus\iam\dto\RegisterRequest.class
 com\journeyplus\config\DataLoader.class
@@ -121,9 +128,11 @@ com\journeyplus\event\StatusChangeEventListener.class
 com\journeyplus\compliance\repository\ComplianceAuditRepository.class
 com\journeyplus\config\JwtTokenProvider.class
 com\journeyplus\iam\dto\UserResponse.class
+com\journeyplus\iam\dto\DelegateRequest.class
 com\journeyplus\compliance\service\PolicyComplianceEngine.class
 com\journeyplus\notification\entity\Notification.class
 com\journeyplus\expense\entity\ExpenseStatus.class
 com\journeyplus\iam\dto\AuthRequest.class
 com\journeyplus\advance\entity\AdvanceRequest.class
+com\journeyplus\compliance\entity\AuditStatus.class
 com\journeyplus\expense\repository\ReimbursementRepository.class

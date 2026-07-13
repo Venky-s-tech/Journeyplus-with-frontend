@@ -274,6 +274,7 @@ public class TripServiceTest {
 
         TripRequest trip = new TripRequest();
         trip.setId(tripId);
+        trip.setStatus(TripStatus.APPROVED);
 
         VisaRequirement visa = new VisaRequirement();
         visa.setId(visaId);
@@ -361,5 +362,153 @@ public class TripServiceTest {
 
         List<TripRequest> result = tripService.getTripsForManager(20L);
         assertEquals(1, result.size());
+    }
+
+    @Test
+    public void addItineraryLeg_ThrowsException_ForNonApprovedTrip() {
+        Long tripId = 100L;
+        TripRequest trip = new TripRequest();
+        trip.setId(tripId);
+        trip.setStatus(TripStatus.DRAFT);
+
+        when(tripRequestRepository.findById(tripId)).thenReturn(Optional.of(trip));
+
+        ItineraryLeg leg = new ItineraryLeg();
+        leg.setOrigin("Paris");
+        leg.setDestination("London");
+        leg.setCost(new BigDecimal("100.00"));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            tripService.addItineraryLeg(tripId, leg);
+        });
+
+        assertEquals("Itinerary details can only be managed for APPROVED trips", exception.getMessage());
+    }
+
+    @Test
+    public void addVisaRequirement_ThrowsException_ForNonApprovedTrip() {
+        Long tripId = 100L;
+        TripRequest trip = new TripRequest();
+        trip.setId(tripId);
+        trip.setStatus(TripStatus.DRAFT);
+        trip.setTravelType("INTERNATIONAL");
+
+        when(tripRequestRepository.findById(tripId)).thenReturn(Optional.of(trip));
+
+        VisaRequirement visa = new VisaRequirement();
+        visa.setCountry("UK");
+        visa.setVisaType("Business");
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            tripService.addVisaRequirement(tripId, visa);
+        });
+
+        assertEquals("Visa details can only be managed for APPROVED trips", exception.getMessage());
+    }
+
+    @Test
+    public void addItineraryLeg_BookingReferenceConsistency() {
+        Long tripId = 100L;
+        TripRequest trip = new TripRequest();
+        trip.setId(tripId);
+        trip.setStatus(TripStatus.APPROVED);
+
+        when(tripRequestRepository.findById(tripId)).thenReturn(Optional.of(trip));
+
+        ItineraryLeg existingLeg = new ItineraryLeg();
+        existingLeg.setBookingRef("REF123");
+
+        when(itineraryLegRepository.findByTripRequest_Id(tripId)).thenReturn(Arrays.asList(existingLeg));
+
+        // 1. Try to add a leg with an inconsistent booking reference
+        ItineraryLeg inconsistentLeg = new ItineraryLeg();
+        inconsistentLeg.setOrigin("Paris");
+        inconsistentLeg.setDestination("London");
+        inconsistentLeg.setCost(new BigDecimal("100.00"));
+        inconsistentLeg.setBookingRef("REF999");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            tripService.addItineraryLeg(tripId, inconsistentLeg);
+        });
+        assertTrue(exception.getMessage().contains("Booking reference must be the same"));
+
+        // 2. Try to add a leg with the same booking reference (case-insensitive)
+        ItineraryLeg consistentLeg = new ItineraryLeg();
+        consistentLeg.setOrigin("Paris");
+        consistentLeg.setDestination("London");
+        consistentLeg.setCost(new BigDecimal("100.00"));
+        consistentLeg.setBookingRef("ref123");
+
+        when(itineraryLegRepository.save(any(ItineraryLeg.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ItineraryLeg savedConsistent = tripService.addItineraryLeg(tripId, consistentLeg);
+        assertEquals("ref123", savedConsistent.getBookingRef());
+
+        // 3. Try to add a leg with null/empty booking reference (should auto-copy existing one)
+        ItineraryLeg emptyRefLeg = new ItineraryLeg();
+        emptyRefLeg.setOrigin("Paris");
+        emptyRefLeg.setDestination("London");
+        emptyRefLeg.setCost(new BigDecimal("100.00"));
+        emptyRefLeg.setBookingRef(null);
+
+        ItineraryLeg savedEmpty = tripService.addItineraryLeg(tripId, emptyRefLeg);
+        assertEquals("REF123", savedEmpty.getBookingRef());
+    }
+
+    @Test
+    public void updateItineraryLeg_BookingReferenceConsistency() {
+        Long legId = 200L;
+        Long tripId = 100L;
+        TripRequest trip = new TripRequest();
+        trip.setId(tripId);
+        trip.setStatus(TripStatus.APPROVED);
+
+        ItineraryLeg existingLeg = new ItineraryLeg();
+        existingLeg.setId(legId);
+        existingLeg.setTripRequest(trip);
+        existingLeg.setOrigin("Paris");
+        existingLeg.setDestination("London");
+        existingLeg.setCost(new BigDecimal("100.00"));
+        existingLeg.setBookingRef("REF123");
+
+        when(itineraryLegRepository.findById(legId)).thenReturn(Optional.of(existingLeg));
+        when(itineraryLegRepository.findByTripRequest_Id(tripId)).thenReturn(Arrays.asList(existingLeg));
+
+        // 1. Try to update the leg with a different booking reference
+        ItineraryLeg updatedInconsistent = new ItineraryLeg();
+        updatedInconsistent.setOrigin("Paris");
+        updatedInconsistent.setDestination("London");
+        updatedInconsistent.setCost(new BigDecimal("100.00"));
+        updatedInconsistent.setBookingRef("REF999");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            tripService.updateItineraryLeg(legId, updatedInconsistent);
+        });
+        assertTrue(exception.getMessage().contains("Booking reference must be the same"));
+
+        // 2. Try to update the leg with the same booking reference (case-insensitive)
+        ItineraryLeg updatedConsistent = new ItineraryLeg();
+        updatedConsistent.setOrigin("Paris");
+        updatedConsistent.setDestination("London");
+        updatedConsistent.setCost(new BigDecimal("100.00"));
+        updatedConsistent.setBookingRef("ref123");
+
+        when(itineraryLegRepository.save(any(ItineraryLeg.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ItineraryLeg savedConsistent = tripService.updateItineraryLeg(legId, updatedConsistent);
+        assertEquals("ref123", savedConsistent.getBookingRef());
+
+        // Reset the mock object's booking reference for step 3
+        existingLeg.setBookingRef("REF123");
+
+        // 3. Try to update the leg with null booking reference (should retain the existing trip's booking reference)
+        ItineraryLeg updatedEmpty = new ItineraryLeg();
+        updatedEmpty.setOrigin("Paris");
+        updatedEmpty.setDestination("London");
+        updatedEmpty.setCost(new BigDecimal("100.00"));
+        updatedEmpty.setBookingRef(null);
+
+        ItineraryLeg savedEmpty = tripService.updateItineraryLeg(legId, updatedEmpty);
+        assertEquals("REF123", savedEmpty.getBookingRef());
     }
 }

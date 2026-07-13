@@ -62,12 +62,12 @@ public class NotificationController {
                 item.put("message", messageText == null ? "" : messageText);
                 item.put("read", n.isRead());
                 item.put("notificationType", n.getNotificationType() == null ? "" : n.getNotificationType());
-                item.put("status", n.getStatus() == null ? "" : n.getStatus());
+                item.put("status", n.getStatus() == null ? "" : n.getStatus().name());
+                item.put("category", n.getCategory() == null ? "" : n.getCategory().name());
                 item.put("createdAt", n.getCreatedAt());
                 item.put("actor", actorSafe);
                 
                 out.add(item);
-                // out.add(item); // Removed duplicate entry
             }
 
             Map<String, Object> resp = Map.of(
@@ -115,7 +115,8 @@ public class NotificationController {
                 item.put("message", messageText == null ? "" : messageText);
                 item.put("read", n.isRead());
                 item.put("notificationType", n.getNotificationType() == null ? "" : n.getNotificationType());
-                item.put("status", n.getStatus() == null ? "" : n.getStatus());
+                item.put("status", n.getStatus() == null ? "" : n.getStatus().name());
+                item.put("category", n.getCategory() == null ? "" : n.getCategory().name());
                 item.put("createdAt", n.getCreatedAt());
                 item.put("actor", actorSafe);
                 out.add(item);
@@ -229,6 +230,8 @@ public class NotificationController {
             notif.put("title", notification.getTitle() == null ? "" : notification.getTitle());
             notif.put("message", notification.getMessage() == null ? "" : notification.getMessage());
             notif.put("read", notification.isRead());
+            notif.put("status", notification.getStatus().name());
+            notif.put("category", notification.getCategory().name());
             body.put("notification", notif);
             return ResponseEntity.ok(body);
         } catch (org.springframework.security.access.AccessDeniedException ade) {
@@ -236,6 +239,46 @@ public class NotificationController {
         } catch (Exception e) {
             log.error("Failed to mark notification as read: {}", e.getMessage(), e);
             return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("status", "error"));
+        }
+    }
+
+    @PostMapping("/{id}/dismiss")
+    @Transactional
+    public ResponseEntity<Map<String, Object>> dismissNotification(@PathVariable Long id, @AuthenticationPrincipal User user) {
+        if (user == null) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.UNAUTHORIZED)
+                .body(Map.of("status", "error", "message", "unauthorized"));
+        }
+
+        try {
+            User fullUser = resolvePrincipal(user);
+            Optional<Notification> optional = notificationRepository.findById(id);
+            if (optional.isEmpty()) return ResponseEntity.status(404).body(Map.of("status", "error", "message", "Notification not found"));
+            Notification notification = optional.get();
+            Long ownerId = notification.getUser() != null ? notification.getUser().getId() : null;
+            if (ownerId == null || !ownerId.equals(fullUser.getId())) {
+                throw new org.springframework.security.access.AccessDeniedException("You are not authorized to dismiss this notification");
+            }
+
+            notification.setStatus(com.journeyplus.notification.entity.NotificationStatus.Dismissed);
+            notificationRepository.save(notification);
+
+            Map<String, Object> body = new java.util.HashMap<>();
+            body.put("status", "Notification dismissed");
+            Map<String, Object> notif = new java.util.HashMap<>();
+            notif.put("id", notification.getId());
+            notif.put("title", notification.getTitle() == null ? "" : notification.getTitle());
+            notif.put("message", notification.getMessage() == null ? "" : notification.getMessage());
+            notif.put("read", notification.isRead());
+            notif.put("status", notification.getStatus().name());
+            notif.put("category", notification.getCategory().name());
+            body.put("notification", notif);
+            return ResponseEntity.ok(body);
+        } catch (org.springframework.security.access.AccessDeniedException ade) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).body(Map.of("status", "error", "message", ade.getMessage()));
+        } catch (Exception e) {
+            log.error("Failed to dismiss notification: {}", e.getMessage(), e);
+            return ResponseEntity.status(500).body(Map.of("status", "error"));
         }
     }
 }

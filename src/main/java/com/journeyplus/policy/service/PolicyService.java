@@ -78,6 +78,13 @@ public class PolicyService {
                 createdBy
         );
 
+        if (request.getMaxAmountPerTrip() != null) {
+            policy.setMaxAmountPerTrip(request.getMaxAmountPerTrip());
+        }
+        if (request.getRequiresVisaVerification() != null) {
+            policy.setRequiresVisaVerification(request.getRequiresVisaVerification());
+        }
+
         TravelPolicy saved = travelPolicyRepository.save(policy);
         return new TravelPolicyResponse(saved);
     }
@@ -120,6 +127,14 @@ public class PolicyService {
                     PolicyStatus.ACTIVE,
                     existingPolicy.getCreatedBy()
             );
+
+            if (request.getMaxAmountPerTrip() != null) {
+                newPolicy.setMaxAmountPerTrip(request.getMaxAmountPerTrip());
+            }
+            if (request.getRequiresVisaVerification() != null) {
+                newPolicy.setRequiresVisaVerification(request.getRequiresVisaVerification());
+            }
+
             TravelPolicy saved = travelPolicyRepository.save(newPolicy);
             return new TravelPolicyResponse(saved);
         } else {
@@ -133,6 +148,12 @@ public class PolicyService {
             existingPolicy.setPerDiemRate(request.getPerDiemRate());
             existingPolicy.setLocalConveyanceLimit(request.getLocalConveyanceLimit());
             existingPolicy.setStatus(request.getStatus());
+            if (request.getMaxAmountPerTrip() != null) {
+                existingPolicy.setMaxAmountPerTrip(request.getMaxAmountPerTrip());
+            }
+            if (request.getRequiresVisaVerification() != null) {
+                existingPolicy.setRequiresVisaVerification(request.getRequiresVisaVerification());
+            }
             TravelPolicy saved = travelPolicyRepository.save(existingPolicy);
             return new TravelPolicyResponse(saved);
         }
@@ -167,6 +188,18 @@ public class PolicyService {
         TravelPolicy policy = travelPolicyRepository.findByGrade_IdAndTravelTypeAndStatus(gradeId, travelType, PolicyStatus.ACTIVE)
                 .orElseThrow(() -> new IllegalArgumentException("No effective active policy found for grade " + gradeId + " and travel type " + travelType));
         return new TravelPolicyResponse(policy);
+    }
+
+    public TravelPolicyResponse getEffectivePolicy(String gradeId, TravelType travelType, LocalDateTime tripDate) {
+        log.info("Finding effective active policy for grade: {}, travelType: {}, date: {}", gradeId, travelType, tripDate);
+        if (tripDate == null) {
+            return getEffectivePolicy(gradeId, travelType);
+        }
+        List<TravelPolicy> policies = travelPolicyRepository.findEffectivePoliciesForDate(gradeId, travelType, tripDate);
+        if (policies.isEmpty()) {
+            return getEffectivePolicy(gradeId, travelType);
+        }
+        return new TravelPolicyResponse(policies.get(0));
     }
 
     // ==========================================

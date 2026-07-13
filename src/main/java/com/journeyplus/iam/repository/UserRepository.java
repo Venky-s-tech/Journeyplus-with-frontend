@@ -4,8 +4,6 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.journeyplus.iam.entity.Role;
@@ -19,17 +17,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
     List<User> findByActiveFalse();
 
-    @Query("SELECT u FROM User u WHERE " +
-           "(:email IS NULL OR u.email = :email) AND " +
-           "(:name IS NULL OR LOWER(u.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
-           "(:role IS NULL OR u.role = :role) AND " +
-           "(:gradeId IS NULL OR u.grade.id = :gradeId) AND " +
-           "(:active IS NULL OR u.active = :active)")
-    List<User> searchUsers(
-            @Param("email") String email,
-            @Param("name") String name,
-            @Param("role") Role role,
-            @Param("gradeId") String gradeId,
-            @Param("active") Boolean active
-    );
+    List<User> findByEmailAndNameContainingIgnoreCaseAndRoleAndGrade_IdAndActive(String email, String name, Role role, String gradeId, Boolean active);
+
+    default List<User> searchUsers(String email, String name, Role role, String gradeId, Boolean active) {
+        return findByEmailAndNameContainingIgnoreCaseAndRoleAndGrade_IdAndActive(email, name, role, gradeId, active);
+    }
 }
+
+
+
+
+

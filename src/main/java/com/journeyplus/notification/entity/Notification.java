@@ -32,9 +32,14 @@ public class Notification {
     @Column(name = "notification_type", nullable = false, length = 50)
     private String notificationType = "IN_APP"; // IN_APP, EMAIL_SIMULATED
  
-    @Column(nullable = false, length = 50)
-    private String status = "SENT"; // PENDING, SENT, FAILED
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 50)
+    private NotificationStatus status = NotificationStatus.Unread; // Unread, Read, Dismissed
  
+    @Enumerated(EnumType.STRING)
+    @Column(name = "category", nullable = false, length = 50)
+    private NotificationCategory category = NotificationCategory.TripRequest; // TripRequest, Advance, ExpenseClaim, PolicyException, Compliance
+
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
  
@@ -57,5 +62,16 @@ public class Notification {
         this.createdAt = LocalDateTime.now();
         this.actorId = actorId;
         this.actorName = actorName;
+        this.status = NotificationStatus.Unread;
+        this.category = NotificationCategory.TripRequest;
+    }
+
+    public boolean isRead() {
+        return this.status == NotificationStatus.Read;
+    }
+
+    public void setRead(boolean read) {
+        this.read = read;
+        this.status = read ? NotificationStatus.Read : NotificationStatus.Unread;
     }
 }

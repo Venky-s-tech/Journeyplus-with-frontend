@@ -46,29 +46,5 @@ public class ItineraryLegResponse {
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
-    // Deprecated getters and setters for backward compatibility
-    @Deprecated
-    public String getDepartureCity() { return origin; }
-    @Deprecated
-    public void setDepartureCity(String departureCity) { this.origin = departureCity; }
-    @Deprecated
-    public String getArrivalCity() { return destination; }
-    @Deprecated
-    public void setArrivalCity(String arrivalCity) { this.destination = arrivalCity; }
-    @Deprecated
-    public String getTravelMode() { return legType; }
-    @Deprecated
-    public void setTravelMode(String travelMode) { this.legType = travelMode; }
-    @Deprecated
-    public BigDecimal getEstimatedCost() { return cost; }
-    @Deprecated
-    public void setEstimatedCost(BigDecimal estimatedCost) { this.cost = estimatedCost; }
-    @Deprecated
-    public String getBookingReference() { return bookingRef; }
-    @Deprecated
-    public void setBookingReference(String bookingReference) { this.bookingRef = bookingReference; }
-    @Deprecated
-    public String getBookingStatus() { return status; }
-    @Deprecated
-    public void setBookingStatus(String bookingStatus) { this.status = bookingStatus; }
+
 }

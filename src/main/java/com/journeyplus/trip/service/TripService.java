@@ -40,6 +40,12 @@ public class TripService {
     @Autowired
     private ApplicationEventPublisher eventPublisher;
 
+    @Autowired
+    private com.journeyplus.policy.repository.TravelPolicyRepository travelPolicyRepository;
+
+    @Autowired
+    private com.journeyplus.policy.repository.CityTierRepository cityTierRepository;
+
     @Transactional
     @AuditAction(module = "TRIP", action = "CREATE_TRIP")
     public TripRequest createTripRequest(TripRequest tripRequest, List<ItineraryLeg> legs, List<VisaRequirement> visas) {
@@ -169,9 +175,14 @@ public class TripService {
             throw new IllegalArgumentException("Invalid status: Status must be APPROVED or REJECTED");
         }
 
-        // Validate that the manager is the assigned approver
-        if (trip.getApprover() == null || !trip.getApprover().getId().equals(manager.getId())) {
-            throw new org.springframework.security.access.AccessDeniedException("Only the assigned approving manager can approve or reject this trip");
+        // Validate that the manager is the assigned approver or their active delegate
+        boolean isAssignedApprover = trip.getApprover() != null && trip.getApprover().getId().equals(manager.getId());
+        boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null 
+                && trip.getApprover().getDelegateApprover().getId().equals(manager.getId()) 
+                && trip.getApprover().isDelegationActive();
+
+        if (!isAssignedApprover && !isDelegateApprover) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the assigned approving manager or their active delegate can approve or reject this trip");
         }
 
         trip.setStatus(newStatus);
@@ -254,12 +265,52 @@ public class TripService {
     // ITINERARY LEG CRUD
     // ==========================================
 
+    public String getExistingBookingReference(Long tripId) {
+        List<ItineraryLeg> legs = itineraryLegRepository.findByTripRequest_Id(tripId);
+        if (legs == null) return null;
+        for (ItineraryLeg leg : legs) {
+            String ref = leg.getBookingRef();
+            if (ref != null && !ref.trim().isEmpty()) {
+                return ref.trim();
+            }
+        }
+        return null;
+    }
+
     @Transactional
     public ItineraryLeg addItineraryLeg(Long tripId, ItineraryLeg leg) {
         TripRequest trip = getTripRequest(tripId);
+        if (trip.getStatus() != TripStatus.APPROVED) {
+            throw new IllegalStateException("Itinerary details can only be managed for APPROVED trips");
+        }
         validateItineraryLegBusinessRules(leg);
+
+        // Enforce booking reference consistency
+        String existingRef = getExistingBookingReference(tripId);
+        if (existingRef != null) {
+            String incomingRef = leg.getBookingRef();
+            if (incomingRef != null && !incomingRef.trim().isEmpty()) {
+                if (!existingRef.equalsIgnoreCase(incomingRef.trim())) {
+                    throw new IllegalArgumentException("Booking reference must be the same as the existing booking reference: " + existingRef);
+                }
+            } else {
+                leg.setBookingRef(existingRef);
+            }
+        }
+
         leg.setTripRequest(trip);
-        return itineraryLegRepository.save(leg);
+        ItineraryLeg savedLeg = itineraryLegRepository.save(leg);
+        if (trip.getEmployee() != null) {
+            eventPublisher.publishEvent(new StatusChangeEvent(
+                trip.getEmployee().getId(),
+                "Itinerary Leg Added",
+                "An itinerary leg (" + leg.getOrigin() + " to " + leg.getDestination() + ") has been added to your trip.",
+                null,
+                "Travel Desk",
+                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+            ));
+        }
+        return savedLeg;
     }
 
     public ItineraryLeg getItineraryLeg(Long legId) {
@@ -270,7 +321,24 @@ public class TripService {
     @Transactional
     public ItineraryLeg updateItineraryLeg(Long legId, ItineraryLeg updatedData) {
         ItineraryLeg existing = getItineraryLeg(legId);
+        if (existing.getTripRequest() == null || existing.getTripRequest().getStatus() != TripStatus.APPROVED) {
+            throw new IllegalStateException("Itinerary details can only be managed for APPROVED trips");
+        }
         validateItineraryLegBusinessRules(updatedData);
+
+        // Enforce booking reference consistency
+        Long tripId = existing.getTripRequest().getId();
+        String existingRef = getExistingBookingReference(tripId);
+        if (existingRef != null) {
+            String incomingRef = updatedData.getBookingRef();
+            if (incomingRef != null && !incomingRef.trim().isEmpty()) {
+                if (!existingRef.equalsIgnoreCase(incomingRef.trim())) {
+                    throw new IllegalArgumentException("Booking reference must be the same as the existing booking reference: " + existingRef);
+                }
+            } else {
+                updatedData.setBookingRef(existingRef);
+            }
+        }
 
         existing.setOrigin(updatedData.getOrigin());
         existing.setDestination(updatedData.getDestination());
@@ -285,13 +353,37 @@ public class TripService {
         if (updatedData.getBookingRef() != null) existing.setBookingRef(updatedData.getBookingRef());
         if (updatedData.getStatus() != null) existing.setStatus(updatedData.getStatus());
 
-        return itineraryLegRepository.save(existing);
+        ItineraryLeg savedLeg = itineraryLegRepository.save(existing);
+        if (existing.getTripRequest() != null && existing.getTripRequest().getEmployee() != null) {
+            eventPublisher.publishEvent(new StatusChangeEvent(
+                existing.getTripRequest().getEmployee().getId(),
+                "Itinerary Leg Updated",
+                "An itinerary leg (" + existing.getOrigin() + " to " + existing.getDestination() + ") has been updated on your trip.",
+                null,
+                "Travel Desk",
+                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+            ));
+        }
+        return savedLeg;
     }
 
     @Transactional
     public void deleteItineraryLeg(Long legId) {
         ItineraryLeg existing = getItineraryLeg(legId);
+        if (existing.getTripRequest() == null || existing.getTripRequest().getStatus() != TripStatus.APPROVED) {
+            throw new IllegalStateException("Itinerary details can only be managed for APPROVED trips");
+        }
         itineraryLegRepository.delete(existing);
+        if (existing.getTripRequest() != null && existing.getTripRequest().getEmployee() != null) {
+            eventPublisher.publishEvent(new StatusChangeEvent(
+                existing.getTripRequest().getEmployee().getId(),
+                "Itinerary Leg Deleted",
+                "An itinerary leg (" + existing.getOrigin() + " to " + existing.getDestination() + ") has been removed from your trip.",
+                null,
+                "Travel Desk",
+                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+            ));
+        }
     }
 
     // ==========================================
@@ -301,12 +393,26 @@ public class TripService {
     @Transactional
     public VisaRequirement addVisaRequirement(Long tripId, VisaRequirement visa) {
         TripRequest trip = getTripRequest(tripId);
+        if (trip.getStatus() != TripStatus.APPROVED) {
+            throw new IllegalStateException("Visa details can only be managed for APPROVED trips");
+        }
         if (!"INTERNATIONAL".equalsIgnoreCase(trip.getTravelType())) {
             throw new IllegalArgumentException("Visa records are only allowed for INTERNATIONAL trips");
         }
         validateVisaRequirementBusinessRules(visa);
         visa.setTripRequest(trip);
-        return visaRequirementRepository.save(visa);
+        VisaRequirement savedVisa = visaRequirementRepository.save(visa);
+        if (trip.getEmployee() != null) {
+            eventPublisher.publishEvent(new StatusChangeEvent(
+                trip.getEmployee().getId(),
+                "Visa Requirement Added",
+                "A visa requirement for " + visa.getCountry() + " has been added to your trip.",
+                null,
+                "Travel Desk",
+                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+            ));
+        }
+        return savedVisa;
     }
 
     public VisaRequirement getVisaRequirement(Long visaId) {
@@ -317,6 +423,9 @@ public class TripService {
     @Transactional
     public VisaRequirement updateVisaRequirement(Long visaId, VisaRequirement updatedData) {
         VisaRequirement existing = getVisaRequirement(visaId);
+        if (existing.getTripRequest() == null || existing.getTripRequest().getStatus() != TripStatus.APPROVED) {
+            throw new IllegalStateException("Visa details can only be managed for APPROVED trips");
+        }
         validateVisaRequirementBusinessRules(updatedData);
 
         // Validate visa status transitions
@@ -330,7 +439,18 @@ public class TripService {
         existing.setStatus(updatedData.getStatus());
         existing.setNotes(updatedData.getNotes());
 
-        return visaRequirementRepository.save(existing);
+        VisaRequirement savedVisa = visaRequirementRepository.save(existing);
+        if (existing.getTripRequest() != null && existing.getTripRequest().getEmployee() != null) {
+            eventPublisher.publishEvent(new StatusChangeEvent(
+                existing.getTripRequest().getEmployee().getId(),
+                "Visa Requirement Updated",
+                "A visa requirement for " + existing.getCountry() + " has been updated on your trip.",
+                null,
+                "Travel Desk",
+                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+            ));
+        }
+        return savedVisa;
     }
 
     @Transactional
@@ -339,6 +459,9 @@ public class TripService {
         VisaRequirement existing = getVisaRequirement(visaId);
         if (existing.getTripRequest() == null || !existing.getTripRequest().getId().equals(tripId)) {
             throw new IllegalArgumentException("Visa requirement does not belong to the specified trip");
+        }
+        if (existing.getTripRequest().getStatus() != TripStatus.APPROVED) {
+            throw new IllegalStateException("Visa details can only be managed for APPROVED trips");
         }
 
         // Validate visa status transitions
@@ -354,7 +477,18 @@ public class TripService {
         if (visaRequest.getApplicationDate() != null) existing.setApplicationDate(visaRequest.getApplicationDate());
         if (visaRequest.getSubmittedDate() != null) existing.setSubmittedDate(visaRequest.getSubmittedDate());
 
-        return visaRequirementRepository.save(existing);
+        VisaRequirement savedVisa = visaRequirementRepository.save(existing);
+        if (existing.getTripRequest() != null && existing.getTripRequest().getEmployee() != null) {
+            eventPublisher.publishEvent(new StatusChangeEvent(
+                existing.getTripRequest().getEmployee().getId(),
+                "Visa Requirement Updated",
+                "A visa requirement for " + existing.getCountry() + " has been updated on your trip.",
+                null,
+                "Travel Desk",
+                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+            ));
+        }
+        return savedVisa;
     }
 
     @Transactional
@@ -382,6 +516,36 @@ public class TripService {
         }
         if (trip.getEstimatedCost() == null || trip.getEstimatedCost().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("EstimatedCost must be positive");
+        }
+
+        if (trip.getEmployee() != null && trip.getEmployee().getGrade() != null) {
+            String gradeId = trip.getEmployee().getGrade().getId();
+            String tType = trip.getTravelType();
+            com.journeyplus.policy.entity.TravelType travelType = com.journeyplus.policy.entity.TravelType.DOMESTIC;
+            if (tType != null && ("INTERNATIONAL".equalsIgnoreCase(tType) || "INTL".equalsIgnoreCase(tType))) {
+                travelType = com.journeyplus.policy.entity.TravelType.INTERNATIONAL;
+            }
+            java.time.LocalDateTime tripDateTime = trip.getDepartureDate().atStartOfDay();
+            List<com.journeyplus.policy.entity.TravelPolicy> policies = travelPolicyRepository.findEffectivePoliciesForDate(gradeId, travelType, tripDateTime);
+            if (!policies.isEmpty()) {
+                com.journeyplus.policy.entity.TravelPolicy policy = policies.get(0);
+                long days = java.time.temporal.ChronoUnit.DAYS.between(trip.getDepartureDate(), trip.getReturnDate());
+                if (days <= 0) days = 1;
+                BigDecimal perDiem = policy.getPerDiemRate();
+                BigDecimal maxAllowed = perDiem.multiply(BigDecimal.valueOf(days));
+                
+                java.util.Optional<com.journeyplus.policy.entity.CityTier> tierOpt = cityTierRepository.findByCityNameIgnoreCase(trip.getDestination());
+                if (tierOpt.isPresent()) {
+                    BigDecimal tierPerDiem = tierOpt.get().getPerDiemRate();
+                    if (tierPerDiem != null && tierPerDiem.compareTo(BigDecimal.ZERO) > 0) {
+                        maxAllowed = tierPerDiem.multiply(BigDecimal.valueOf(days));
+                    }
+                }
+                
+                if (trip.getEstimatedCost().compareTo(maxAllowed.multiply(new BigDecimal("3.0"))) > 0) {
+                    throw new IllegalArgumentException("Estimated cost exceeds the maximum allowable policy budget limit of " + maxAllowed.multiply(new BigDecimal("3.0")) + " USD for this trip duration and destination");
+                }
+            }
         }
     }
 
