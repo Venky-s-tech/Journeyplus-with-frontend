@@ -2,12 +2,10 @@ package com.journeyplus.advance.service;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +19,7 @@ import com.journeyplus.advance.repository.AdvanceSettlementRepository;
 import com.journeyplus.config.AuditAction;
 import com.journeyplus.event.StatusChangeEvent;
 import com.journeyplus.iam.entity.User;
+import com.journeyplus.iam.repository.UserRepository;
 import com.journeyplus.trip.entity.TripRequest;
 import com.journeyplus.trip.entity.TripStatus;
 import com.journeyplus.trip.service.TripService;
@@ -30,20 +29,24 @@ public class AdvanceService {
 
     private static final Logger log = LoggerFactory.getLogger(AdvanceService.class);
 
-    @Autowired
-    private AdvanceRequestRepository advanceRequestRepository;
+    private final AdvanceRequestRepository advanceRequestRepository;
+    private final AdvanceSettlementRepository advanceSettlementRepository;
+    private final TripService tripService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private AdvanceSettlementRepository advanceSettlementRepository;
-
-    @Autowired
-    private TripService tripService;
-
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
-
-    @Autowired
-    private com.journeyplus.iam.repository.UserRepository userRepository;
+    public AdvanceService(
+            AdvanceRequestRepository advanceRequestRepository,
+            AdvanceSettlementRepository advanceSettlementRepository,
+            TripService tripService,
+            ApplicationEventPublisher eventPublisher,
+            UserRepository userRepository) {
+        this.advanceRequestRepository = advanceRequestRepository;
+        this.advanceSettlementRepository = advanceSettlementRepository;
+        this.tripService = tripService;
+        this.eventPublisher = eventPublisher;
+        this.userRepository = userRepository;
+    }
 
     @Transactional
     @AuditAction(module = "ADVANCE", action = "CREATE_ADVANCE")
@@ -83,7 +86,7 @@ public class AdvanceService {
             eventPublisher.publishEvent(new StatusChangeEvent(
                 trip.getApprover().getId(),
                 "New Advance Request",
-                "A cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() + 
+                "A cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() +
                 " has been requested by " + request.getEmployee().getUsername() + ".",
                 request.getEmployee() != null ? request.getEmployee().getId() : null,
                 request.getEmployee() != null ? request.getEmployee().getUsername() : null,
@@ -144,8 +147,8 @@ public class AdvanceService {
         // Enforce that the approver is the assigned manager of the trip request or their active delegate
         TripRequest trip = request.getTripRequest();
         boolean isAssignedApprover = trip.getApprover() != null && trip.getApprover().getId().equals(approver.getId());
-        boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null 
-                && trip.getApprover().getDelegateApprover().getId().equals(approver.getId()) 
+        boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null
+                && trip.getApprover().getDelegateApprover().getId().equals(approver.getId())
                 && trip.getApprover().isDelegationActive();
 
         if (!isAssignedApprover && !isDelegateApprover) {
@@ -159,7 +162,7 @@ public class AdvanceService {
         notifyEmployeeAndFinance(
             request.getEmployee().getId(),
             "Advance Request Approved",
-            "Your cash advance request for " + request.getRequestedAmount() + " " + request.getCurrency() + 
+            "Your cash advance request for " + request.getRequestedAmount() + " " + request.getCurrency() +
             " has been approved by " + approver.getUsername() + ".",
             approver != null ? approver.getId() : null,
             approver != null ? approver.getUsername() : null
@@ -186,7 +189,7 @@ public class AdvanceService {
         notifyEmployeeAndFinance(
             request.getEmployee().getId(),
             "Advance Disbursed",
-            "Your cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() + 
+            "Your cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() +
             " has been disbursed to your account.",
             null,
             null
@@ -212,7 +215,7 @@ public class AdvanceService {
         notifyEmployeeAndFinance(
             request.getEmployee().getId(),
             "Advance Request Forfeited",
-            "Your cash advance request of " + request.getRequestedAmount() + " " + request.getCurrency() + 
+            "Your cash advance request of " + request.getRequestedAmount() + " " + request.getCurrency() +
             " has been forfeited.",
             null,
             null
@@ -253,7 +256,7 @@ public class AdvanceService {
         // Update AdvanceRequest status if fully accounted for
         List<AdvanceSettlement> allSettlements = advanceSettlementRepository.findByAdvanceRequest_Id(advanceId);
         allSettlements.add(saved); // include the new one
-        
+
         BigDecimal totalUtilised = allSettlements.stream()
                 .map(AdvanceSettlement::getAmountUtilised)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -269,7 +272,7 @@ public class AdvanceService {
             notifyEmployeeAndFinance(
                 request.getEmployee().getId(),
                 "Advance Request Settled",
-                "Your cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() + 
+                "Your cash advance of " + request.getRequestedAmount() + " " + request.getCurrency() +
                 " has been successfully settled.",
                 null,
                 null
@@ -357,7 +360,7 @@ public class AdvanceService {
     }
 
     public List<AdvanceRequest> getPendingApprovals(Long managerId) {
-        return advanceRequestRepository.findPendingApprovals(managerId);
+        return advanceRequestRepository.findByStatusAndTripRequest_Approver_Id(AdvanceStatus.REQUESTED, managerId);
     }
 
     public List<AdvanceRequest> getPendingDisbursements() {
@@ -365,7 +368,7 @@ public class AdvanceService {
     }
 
     public List<AdvanceRequest> filterAdvances(AdvanceStatus status, Long employeeId, Long tripId, String currency) {
-        return advanceRequestRepository.filterAdvances(status, employeeId, tripId, currency);
+        return advanceRequestRepository.findByStatusAndEmployee_IdAndTripRequest_IdAndCurrencyIgnoreCase(status, employeeId, tripId, currency);
     }
 
     private void notifyEmployeeAndFinance(Long employeeId, String title, String message, Long actorId, String actorName) {

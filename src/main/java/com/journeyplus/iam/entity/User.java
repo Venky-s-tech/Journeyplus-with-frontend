@@ -78,6 +78,11 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private boolean active = true;
 
+    // Approval lifecycle status: PENDING, APPROVED, REJECTED.
+    // Nullable so pre-existing rows remain valid; getApprovalStatus() derives a value when null.
+    @Column(name = "approval_status", length = 20)
+    private String approvalStatus;
+
     @Column(name = "created_date", updatable = false)
     private LocalDateTime createdDate = LocalDateTime.now();
 
@@ -119,6 +124,18 @@ public class User implements UserDetails {
         this.active = true;
         this.createdDate = LocalDateTime.now();
         this.updatedDate = LocalDateTime.now();
+    }
+
+    // Approval status with backward-compatible derivation for legacy rows (column may be null).
+    public String getApprovalStatus() {
+        if (approvalStatus != null && !approvalStatus.isBlank()) {
+            return approvalStatus;
+        }
+        return active ? "APPROVED" : "PENDING";
+    }
+
+    public void setApprovalStatus(String approvalStatus) {
+        this.approvalStatus = approvalStatus;
     }
 
     // Status mapping (Active/Inactive)

@@ -11,7 +11,6 @@ import com.journeyplus.iam.entity.Role;
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.iam.repository.GradeRepository;
 import com.journeyplus.iam.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,14 +24,18 @@ public class UserService {
 
     private static final Logger log = LoggerFactory.getLogger(UserService.class);
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
+    private final GradeRepository gradeRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private GradeRepository gradeRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    public UserService(
+            UserRepository userRepository,
+            GradeRepository gradeRepository,
+            PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.gradeRepository = gradeRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
 
     public User getUserByUsername(String username) {
         log.info("Fetching user details for username: {}", username);
@@ -51,7 +54,7 @@ public class UserService {
     }
 
     public List<UserResponse> searchUsers(String email, String name, Role role, String gradeId, Boolean active) {
-        log.info("Searching users with filters - email: {}, name: {}, role: {}, gradeId: {}, active: {}", 
+        log.info("Searching users with filters - email: {}, name: {}, role: {}, gradeId: {}, active: {}",
                 email, name, role, gradeId, active);
         return userRepository.searchUsers(email, name, role, gradeId, active)
                 .stream()

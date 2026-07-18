@@ -2,7 +2,6 @@ package com.journeyplus.iam.controller;
 
 import java.util.List;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,12 +20,18 @@ import com.journeyplus.iam.repository.UserRepository;
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminUserApprovalController {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
+
+    public AdminUserApprovalController(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
 
     @GetMapping("/pending")
     public ResponseEntity<List<User>> getPendingUsers() {
-        List<User> pending = userRepository.findByActiveFalse();
+        // Only users whose approval status is PENDING (rejected users are now retained but excluded here).
+        List<User> pending = userRepository.findAll().stream()
+                .filter(u -> "PENDING".equalsIgnoreCase(u.getApprovalStatus()))
+                .collect(java.util.stream.Collectors.toList());
         return ResponseEntity.ok(pending);
     }
 
@@ -36,6 +41,7 @@ public class AdminUserApprovalController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         user.setActive(true);
+        user.setApprovalStatus("APPROVED");
         userRepository.save(user);
         return ResponseEntity.ok("User approved");
     }
@@ -45,7 +51,10 @@ public class AdminUserApprovalController {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
-        userRepository.delete(user);
-        return ResponseEntity.ok("User rejected and removed");
+        // Retain the record so the user appears under "Rejected" and gets a rejection message on login.
+        user.setActive(false);
+        user.setApprovalStatus("REJECTED");
+        userRepository.save(user);
+        return ResponseEntity.ok("User rejected");
     }
 }

@@ -137,21 +137,21 @@ export const deleteTravelPolicy = async (id: number): Promise<any> => {
   return response.data;
 };
 
-export const searchTravelPolicy = async (gradeId: string, travelType: string): Promise<TravelPolicy> => {
+// Grade is derived server-side from the authenticated employee; it is no longer supplied by the client.
+export const searchTravelPolicy = async (travelType: string): Promise<TravelPolicy> => {
   const response = await api.get<TravelPolicy>("/api/travel-policies/search", {
-    params: { gradeId, travelType },
+    params: { travelType },
   });
   return response.data;
 };
 
 export const calculateAllowance = async (
-  gradeId: string,
   travelType: string,
   cityName: string,
   country: string
 ): Promise<any> => {
   const response = await api.get("/api/travel-policies/calculate-allowance", {
-    params: { gradeId, travelType, cityName, country },
+    params: { travelType, cityName, country },
   });
   return response.data;
 };

@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  usePendingUsers,
   useApproveUser,
   useRejectUser,
 } from "../../hooks";
@@ -15,6 +14,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 import { Check, X, ShieldAlert, Award, UserCheck, Calendar } from "lucide-react";
 import { User } from "../../types";
+import { getErrorMessage } from "../../lib/utils";
 
 export const Users: React.FC = () => {
   const { toast } = useToast();
@@ -26,7 +26,6 @@ export const Users: React.FC = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const { data: pending, isLoading: pendingLoading } = usePendingUsers();
   const approveMutation = useApproveUser();
   const rejectMutation = useRejectUser();
 
@@ -35,6 +34,12 @@ export const Users: React.FC = () => {
     queryKey: ["admin", "users"],
     queryFn: () => adminApi.getUsers(),
   });
+
+  // Bug #4: split the directory by approval status so each list appears under the correct section.
+  const statusOf = (u: User) => (u.approvalStatus || "").toUpperCase();
+  const pendingUsers = (users || []).filter((u) => statusOf(u) === "PENDING");
+  const approvedUsers = (users || []).filter((u) => statusOf(u) === "APPROVED");
+  const rejectedUsers = (users || []).filter((u) => statusOf(u) === "REJECTED");
 
   // Delegation mutation
   const delegateMutation = useMutation({
@@ -47,7 +52,7 @@ export const Users: React.FC = () => {
       setEndDate("");
     },
     onError: (err: any) => {
-      toast(err.response?.data?.message || "Failed to setup delegation", "error");
+      toast(getErrorMessage(err, "Failed to setup delegation"), "error");
     },
   });
 
@@ -134,6 +139,10 @@ export const Users: React.FC = () => {
       header: "Department",
       accessor: (u: User) => <span className="text-xs">{u.departmentId}</span>,
     },
+    {
+      header: "Status",
+      accessor: (u: User) => <StatusBadge status={u.approvalStatus || ""} />,
+    },
   ];
 
   return (
@@ -147,26 +156,36 @@ export const Users: React.FC = () => {
 
       <Tabs defaultValue="pending">
         <TabsList className="mb-4">
-          <TabsTrigger value="pending">Pending Approvals ({pending?.length || 0})</TabsTrigger>
-          <TabsTrigger value="all">Active Directories</TabsTrigger>
+          <TabsTrigger value="pending">Pending Users ({pendingUsers.length})</TabsTrigger>
+          <TabsTrigger value="approved">Approved Users ({approvedUsers.length})</TabsTrigger>
+          <TabsTrigger value="rejected">Rejected Users ({rejectedUsers.length})</TabsTrigger>
           <TabsTrigger value="delegation">Delegation Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending">
           <DataTable
             columns={pendingColumns}
-            data={pending}
-            isLoading={pendingLoading}
+            data={pendingUsers}
+            isLoading={usersLoading}
             emptyMessage="No pending registration requests awaiting approval."
           />
         </TabsContent>
 
-        <TabsContent value="all">
+        <TabsContent value="approved">
           <DataTable
             columns={userColumns}
-            data={users}
+            data={approvedUsers}
             isLoading={usersLoading}
-            emptyMessage="No active directory users found."
+            emptyMessage="No approved users found."
+          />
+        </TabsContent>
+
+        <TabsContent value="rejected">
+          <DataTable
+            columns={userColumns}
+            data={rejectedUsers}
+            isLoading={usersLoading}
+            emptyMessage="No rejected users found."
           />
         </TabsContent>
 
@@ -191,7 +210,7 @@ export const Users: React.FC = () => {
                 >
                   <option value="">Select a manager</option>
                   {users
-                    ?.filter((u) => u.role === "APPROVING_MANAGER")
+                    ?.filter((u) => u.role === "APPROVING_MANAGER" && statusOf(u) !== "REJECTED")
                     ?.map((u) => (
                       <option key={u.id} value={u.id}>
                         {u.name} ({u.username})

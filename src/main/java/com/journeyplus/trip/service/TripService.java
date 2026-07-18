@@ -5,7 +5,6 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,23 +27,27 @@ public class TripService {
 
     private static final Logger log = LoggerFactory.getLogger(TripService.class);
 
-    @Autowired
-    private TripRequestRepository tripRequestRepository;
+    private final TripRequestRepository tripRequestRepository;
+    private final ItineraryLegRepository itineraryLegRepository;
+    private final VisaRequirementRepository visaRequirementRepository;
+    private final ApplicationEventPublisher eventPublisher;
+    private final com.journeyplus.policy.repository.TravelPolicyRepository travelPolicyRepository;
+    private final com.journeyplus.policy.repository.CityTierRepository cityTierRepository;
 
-    @Autowired
-    private ItineraryLegRepository itineraryLegRepository;
-
-    @Autowired
-    private VisaRequirementRepository visaRequirementRepository;
-
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
-
-    @Autowired
-    private com.journeyplus.policy.repository.TravelPolicyRepository travelPolicyRepository;
-
-    @Autowired
-    private com.journeyplus.policy.repository.CityTierRepository cityTierRepository;
+    public TripService(
+            TripRequestRepository tripRequestRepository,
+            ItineraryLegRepository itineraryLegRepository,
+            VisaRequirementRepository visaRequirementRepository,
+            ApplicationEventPublisher eventPublisher,
+            com.journeyplus.policy.repository.TravelPolicyRepository travelPolicyRepository,
+            com.journeyplus.policy.repository.CityTierRepository cityTierRepository) {
+        this.tripRequestRepository = tripRequestRepository;
+        this.itineraryLegRepository = itineraryLegRepository;
+        this.visaRequirementRepository = visaRequirementRepository;
+        this.eventPublisher = eventPublisher;
+        this.travelPolicyRepository = travelPolicyRepository;
+        this.cityTierRepository = cityTierRepository;
+    }
 
     @Transactional
     @AuditAction(module = "TRIP", action = "CREATE_TRIP")
@@ -105,7 +108,16 @@ public class TripService {
         existing.setTravelType(updatedData.getTravelType());
         existing.setEstimatedCost(updatedData.getEstimatedCost());
         existing.setComments(updatedData.getComments());
-        existing.setApprover(updatedData.getApprover());
+        // Only overwrite the approver when the update actually supplied one.
+        // Previously this unconditionally ran existing.setApprover(updatedData.getApprover()),
+        // which silently wiped out an already-assigned approver to null any
+        // time a client's update request simply didn't mention approverUsername
+        // (e.g. a partial update via Swagger/API, or a future edit UI that
+        // only changes a couple of fields) - the approver was never meant
+        // to be cleared in that case, only left alone.
+        if (updatedData.getApprover() != null) {
+            existing.setApprover(updatedData.getApprover());
+        }
 
         validateTripRequestBusinessRules(existing);
 
@@ -132,11 +144,11 @@ public class TripService {
                 Long mgrId = saved.getApprover().getId();
                 log.info("Publishing submission event for manager id={} tripId={}", mgrId, saved.getId());
                 eventPublisher.publishEvent(new StatusChangeEvent(
-                    mgrId,
-                    "New Trip Request Submitted",
-                    "A trip request has been submitted by " + saved.getEmployee().getUsername() + " and requires your review.",
-                    saved.getEmployee() != null ? saved.getEmployee().getId() : null,
-                    saved.getEmployee() != null ? saved.getEmployee().getUsername() : null
+                        mgrId,
+                        "New Trip Request Submitted",
+                        "A trip request has been submitted by " + saved.getEmployee().getUsername() + " and requires your review.",
+                        saved.getEmployee() != null ? saved.getEmployee().getId() : null,
+                        saved.getEmployee() != null ? saved.getEmployee().getUsername() : null
                 ));
             } else {
                 log.info("No approving manager set for tripId={}", saved.getId());
@@ -146,13 +158,13 @@ public class TripService {
         }
 
         try {
-                eventPublisher.publishEvent(new StatusChangeEvent(
+            eventPublisher.publishEvent(new StatusChangeEvent(
                     saved.getEmployee().getId(),
                     "Trip Request Submitted",
                     "Your trip request to " + saved.getDestination() + " has been successfully submitted.",
                     saved.getEmployee() != null ? saved.getEmployee().getId() : null,
                     saved.getEmployee() != null ? saved.getEmployee().getUsername() : null
-                ));
+            ));
         } catch (Exception e) {
             log.error("Error while publishing employee notification for tripId={}: {}", saved.getId(), e.getMessage());
         }
@@ -177,8 +189,8 @@ public class TripService {
 
         // Validate that the manager is the assigned approver or their active delegate
         boolean isAssignedApprover = trip.getApprover() != null && trip.getApprover().getId().equals(manager.getId());
-        boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null 
-                && trip.getApprover().getDelegateApprover().getId().equals(manager.getId()) 
+        boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null
+                && trip.getApprover().getDelegateApprover().getId().equals(manager.getId())
                 && trip.getApprover().isDelegationActive();
 
         if (!isAssignedApprover && !isDelegateApprover) {
@@ -191,11 +203,11 @@ public class TripService {
 
         // Notify employee
         eventPublisher.publishEvent(new StatusChangeEvent(
-            trip.getEmployee().getId(),
-            "Trip Request " + newStatus.name(),
-            "Your trip request to " + trip.getDestination() + " has been " + newStatus.name().toLowerCase() + " by " + manager.getUsername() + ".",
-            manager != null ? manager.getId() : null,
-            manager != null ? manager.getUsername() : null
+                trip.getEmployee().getId(),
+                "Trip Request " + newStatus.name(),
+                "Your trip request to " + trip.getDestination() + " has been " + newStatus.name().toLowerCase() + " by " + manager.getUsername() + ".",
+                manager != null ? manager.getId() : null,
+                manager != null ? manager.getUsername() : null
         ));
 
         return saved;
@@ -302,12 +314,12 @@ public class TripService {
         ItineraryLeg savedLeg = itineraryLegRepository.save(leg);
         if (trip.getEmployee() != null) {
             eventPublisher.publishEvent(new StatusChangeEvent(
-                trip.getEmployee().getId(),
-                "Itinerary Leg Added",
-                "An itinerary leg (" + leg.getOrigin() + " to " + leg.getDestination() + ") has been added to your trip.",
-                null,
-                "Travel Desk",
-                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+                    trip.getEmployee().getId(),
+                    "Itinerary Leg Added",
+                    "An itinerary leg (" + leg.getOrigin() + " to " + leg.getDestination() + ") has been added to your trip.",
+                    null,
+                    "Travel Desk",
+                    com.journeyplus.notification.entity.NotificationCategory.TripRequest
             ));
         }
         return savedLeg;
@@ -356,12 +368,12 @@ public class TripService {
         ItineraryLeg savedLeg = itineraryLegRepository.save(existing);
         if (existing.getTripRequest() != null && existing.getTripRequest().getEmployee() != null) {
             eventPublisher.publishEvent(new StatusChangeEvent(
-                existing.getTripRequest().getEmployee().getId(),
-                "Itinerary Leg Updated",
-                "An itinerary leg (" + existing.getOrigin() + " to " + existing.getDestination() + ") has been updated on your trip.",
-                null,
-                "Travel Desk",
-                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+                    existing.getTripRequest().getEmployee().getId(),
+                    "Itinerary Leg Updated",
+                    "An itinerary leg (" + existing.getOrigin() + " to " + existing.getDestination() + ") has been updated on your trip.",
+                    null,
+                    "Travel Desk",
+                    com.journeyplus.notification.entity.NotificationCategory.TripRequest
             ));
         }
         return savedLeg;
@@ -376,12 +388,12 @@ public class TripService {
         itineraryLegRepository.delete(existing);
         if (existing.getTripRequest() != null && existing.getTripRequest().getEmployee() != null) {
             eventPublisher.publishEvent(new StatusChangeEvent(
-                existing.getTripRequest().getEmployee().getId(),
-                "Itinerary Leg Deleted",
-                "An itinerary leg (" + existing.getOrigin() + " to " + existing.getDestination() + ") has been removed from your trip.",
-                null,
-                "Travel Desk",
-                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+                    existing.getTripRequest().getEmployee().getId(),
+                    "Itinerary Leg Deleted",
+                    "An itinerary leg (" + existing.getOrigin() + " to " + existing.getDestination() + ") has been removed from your trip.",
+                    null,
+                    "Travel Desk",
+                    com.journeyplus.notification.entity.NotificationCategory.TripRequest
             ));
         }
     }
@@ -404,12 +416,12 @@ public class TripService {
         VisaRequirement savedVisa = visaRequirementRepository.save(visa);
         if (trip.getEmployee() != null) {
             eventPublisher.publishEvent(new StatusChangeEvent(
-                trip.getEmployee().getId(),
-                "Visa Requirement Added",
-                "A visa requirement for " + visa.getCountry() + " has been added to your trip.",
-                null,
-                "Travel Desk",
-                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+                    trip.getEmployee().getId(),
+                    "Visa Requirement Added",
+                    "A visa requirement for " + visa.getCountry() + " has been added to your trip.",
+                    null,
+                    "Travel Desk",
+                    com.journeyplus.notification.entity.NotificationCategory.TripRequest
             ));
         }
         return savedVisa;
@@ -442,12 +454,12 @@ public class TripService {
         VisaRequirement savedVisa = visaRequirementRepository.save(existing);
         if (existing.getTripRequest() != null && existing.getTripRequest().getEmployee() != null) {
             eventPublisher.publishEvent(new StatusChangeEvent(
-                existing.getTripRequest().getEmployee().getId(),
-                "Visa Requirement Updated",
-                "A visa requirement for " + existing.getCountry() + " has been updated on your trip.",
-                null,
-                "Travel Desk",
-                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+                    existing.getTripRequest().getEmployee().getId(),
+                    "Visa Requirement Updated",
+                    "A visa requirement for " + existing.getCountry() + " has been updated on your trip.",
+                    null,
+                    "Travel Desk",
+                    com.journeyplus.notification.entity.NotificationCategory.TripRequest
             ));
         }
         return savedVisa;
@@ -480,12 +492,12 @@ public class TripService {
         VisaRequirement savedVisa = visaRequirementRepository.save(existing);
         if (existing.getTripRequest() != null && existing.getTripRequest().getEmployee() != null) {
             eventPublisher.publishEvent(new StatusChangeEvent(
-                existing.getTripRequest().getEmployee().getId(),
-                "Visa Requirement Updated",
-                "A visa requirement for " + existing.getCountry() + " has been updated on your trip.",
-                null,
-                "Travel Desk",
-                com.journeyplus.notification.entity.NotificationCategory.TripRequest
+                    existing.getTripRequest().getEmployee().getId(),
+                    "Visa Requirement Updated",
+                    "A visa requirement for " + existing.getCountry() + " has been updated on your trip.",
+                    null,
+                    "Travel Desk",
+                    com.journeyplus.notification.entity.NotificationCategory.TripRequest
             ));
         }
         return savedVisa;
@@ -526,14 +538,18 @@ public class TripService {
                 travelType = com.journeyplus.policy.entity.TravelType.INTERNATIONAL;
             }
             java.time.LocalDateTime tripDateTime = trip.getDepartureDate().atStartOfDay();
-            List<com.journeyplus.policy.entity.TravelPolicy> policies = travelPolicyRepository.findEffectivePoliciesForDate(gradeId, travelType, tripDateTime);
+            List<com.journeyplus.policy.entity.TravelPolicy> policies = travelPolicyRepository.findListByGrade_IdAndTravelTypeAndStatus(gradeId, travelType, com.journeyplus.policy.entity.PolicyStatus.ACTIVE)
+                    .stream()
+                    .filter(p -> p.getEffectiveDate() != null && !p.getEffectiveDate().isAfter(tripDateTime))
+                    .sorted(java.util.Comparator.comparing(com.journeyplus.policy.entity.TravelPolicy::getEffectiveDate).reversed())
+                    .toList();
             if (!policies.isEmpty()) {
                 com.journeyplus.policy.entity.TravelPolicy policy = policies.get(0);
                 long days = java.time.temporal.ChronoUnit.DAYS.between(trip.getDepartureDate(), trip.getReturnDate());
                 if (days <= 0) days = 1;
                 BigDecimal perDiem = policy.getPerDiemRate();
                 BigDecimal maxAllowed = perDiem.multiply(BigDecimal.valueOf(days));
-                
+
                 java.util.Optional<com.journeyplus.policy.entity.CityTier> tierOpt = cityTierRepository.findByCityNameIgnoreCase(trip.getDestination());
                 if (tierOpt.isPresent()) {
                     BigDecimal tierPerDiem = tierOpt.get().getPerDiemRate();
@@ -541,7 +557,7 @@ public class TripService {
                         maxAllowed = tierPerDiem.multiply(BigDecimal.valueOf(days));
                     }
                 }
-                
+
                 if (trip.getEstimatedCost().compareTo(maxAllowed.multiply(new BigDecimal("3.0"))) > 0) {
                     throw new IllegalArgumentException("Estimated cost exceeds the maximum allowable policy budget limit of " + maxAllowed.multiply(new BigDecimal("3.0")) + " USD for this trip duration and destination");
                 }

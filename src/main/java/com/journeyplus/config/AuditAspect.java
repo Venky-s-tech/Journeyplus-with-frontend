@@ -7,7 +7,6 @@ import com.journeyplus.iam.repository.UserRepository;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -16,11 +15,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class AuditAspect {
 
-    @Autowired
-    private AuditLogRepository auditLogRepository;
+    private final AuditLogRepository auditLogRepository;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private UserRepository userRepository;
+    public AuditAspect(AuditLogRepository auditLogRepository, UserRepository userRepository) {
+        this.auditLogRepository = auditLogRepository;
+        this.userRepository = userRepository;
+    }
 
     @AfterReturning(pointcut = "@annotation(auditAction)", returning = "result")
     public void logAudit(JoinPoint joinPoint, AuditAction auditAction, Object result) {

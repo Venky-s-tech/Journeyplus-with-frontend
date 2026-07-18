@@ -4,7 +4,6 @@ import com.journeyplus.document.entity.Document;
 import com.journeyplus.document.service.DocumentService;
 import com.journeyplus.iam.service.UserService;
 import com.journeyplus.iam.entity.User;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -19,11 +18,13 @@ import java.util.List;
 @RequestMapping("/api/documents")
 public class DocumentController {
 
-    @Autowired
-    private DocumentService documentService;
+    private final DocumentService documentService;
+    private final UserService userService;
 
-    @Autowired
-    private UserService userService;
+    public DocumentController(DocumentService documentService, UserService userService) {
+        this.documentService = documentService;
+        this.userService = userService;
+    }
 
     @PostMapping(path = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('EMPLOYEE','TRAVEL_DESK','ADMIN')")

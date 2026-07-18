@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,14 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.iam.repository.UserRepository;
-import com.journeyplus.trip.dto.ItineraryLegInput;
 import com.journeyplus.trip.dto.ItineraryLegResponse;
 import com.journeyplus.trip.dto.SimpleUserDTO;
-import com.journeyplus.trip.dto.TripCreationRequest;
 import com.journeyplus.trip.dto.TripRequestInput;
 import com.journeyplus.trip.dto.TripResponse;
 import com.journeyplus.trip.dto.TripSummaryResponse;
-import com.journeyplus.trip.dto.VisaRequirementInput;
 import com.journeyplus.trip.dto.VisaRequirementResponse;
 import com.journeyplus.trip.entity.ItineraryLeg;
 import com.journeyplus.trip.entity.TripRequest;
@@ -42,17 +38,21 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/trips")
 public class TripRequestController {
 
-    @Autowired
-    private TripService tripService;
+    private final TripService tripService;
+    private final UserRepository userRepository;
+    private final ItineraryLegRepository itineraryLegRepository;
+    private final VisaRequirementRepository visaRequirementRepository;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private ItineraryLegRepository itineraryLegRepository;
-
-    @Autowired
-    private VisaRequirementRepository visaRequirementRepository;
+    public TripRequestController(
+            TripService tripService,
+            UserRepository userRepository,
+            ItineraryLegRepository itineraryLegRepository,
+            VisaRequirementRepository visaRequirementRepository) {
+        this.tripService = tripService;
+        this.userRepository = userRepository;
+        this.itineraryLegRepository = itineraryLegRepository;
+        this.visaRequirementRepository = visaRequirementRepository;
+    }
 
     @PostMapping
     @PreAuthorize("hasRole('EMPLOYEE')")
@@ -214,10 +214,10 @@ public class TripRequestController {
 
         // Non-admin/non-manager/non-traveldesk users can only view their own trips
         boolean isPrivileged = user.getRole() == com.journeyplus.iam.entity.Role.ADMIN ||
-                              user.getRole() == com.journeyplus.iam.entity.Role.TRAVEL_DESK ||
-                              user.getRole() == com.journeyplus.iam.entity.Role.APPROVING_MANAGER ||
-                              user.getRole() == com.journeyplus.iam.entity.Role.FINANCE ||
-                              user.getRole() == com.journeyplus.iam.entity.Role.COMPLIANCE;
+                user.getRole() == com.journeyplus.iam.entity.Role.TRAVEL_DESK ||
+                user.getRole() == com.journeyplus.iam.entity.Role.APPROVING_MANAGER ||
+                user.getRole() == com.journeyplus.iam.entity.Role.FINANCE ||
+                user.getRole() == com.journeyplus.iam.entity.Role.COMPLIANCE;
 
         Long targetEmployeeId = employeeId;
         if (!isPrivileged) {
@@ -260,9 +260,9 @@ public class TripRequestController {
         // Admins, Compliance, Finance, Travel Desk can view all
         com.journeyplus.iam.entity.Role role = user.getRole();
         if (role == com.journeyplus.iam.entity.Role.ADMIN ||
-            role == com.journeyplus.iam.entity.Role.COMPLIANCE ||
-            role == com.journeyplus.iam.entity.Role.FINANCE ||
-            role == com.journeyplus.iam.entity.Role.TRAVEL_DESK) {
+                role == com.journeyplus.iam.entity.Role.COMPLIANCE ||
+                role == com.journeyplus.iam.entity.Role.FINANCE ||
+                role == com.journeyplus.iam.entity.Role.TRAVEL_DESK) {
             return;
         }
 
@@ -285,13 +285,15 @@ public class TripRequestController {
         try {
             if (u instanceof org.hibernate.proxy.HibernateProxy) {
                 org.hibernate.proxy.HibernateProxy proxy = (org.hibernate.proxy.HibernateProxy) u;
-                Object idObj = proxy.getHibernateLazyInitializer().getIdentifier();
-                if (idObj != null) {
-                    s.setId(Long.valueOf(idObj.toString()));
-                }
-                if (proxy.getHibernateLazyInitializer().isUninitialized()) {
-                    return s;
-                }
+                // Previously this checked isUninitialized() and returned early
+                // with only the ID set, which is why username/email/role came
+                // back null for every approver/employee - the lazy proxy is
+                // essentially always uninitialized at this point since nothing
+                // else in the request would have touched it yet. Forcing the
+                // implementation here triggers Hibernate's normal lazy-load,
+                // which works fine since we're still inside the request's
+                // transaction/session. The outer catch below still provides a
+                // safe ID-only fallback if the session really is closed.
                 u = (User) proxy.getHibernateLazyInitializer().getImplementation();
             }
 

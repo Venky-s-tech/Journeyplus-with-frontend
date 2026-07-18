@@ -11,7 +11,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
 import { Plus } from "lucide-react";
 import { CityTier } from "../../types";
-import { formatCurrency } from "../../lib/utils";
+import { formatCurrency, getErrorMessage } from "../../lib/utils";
 
 export const CityTiers: React.FC = () => {
   const { toast } = useToast();
@@ -39,7 +39,7 @@ export const CityTiers: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "city-tiers"] });
     },
     onError: (err: any) => {
-      toast(err.response?.data?.message || "Failed to create city tier", "error");
+      toast(getErrorMessage(err, "Failed to create city tier"), "error");
     },
   });
 

@@ -2,7 +2,6 @@ package com.journeyplus.config;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
@@ -19,17 +18,21 @@ import com.journeyplus.iam.entity.User;
 @Component
 public class JwtTokenProvider {
 
-    @Autowired
-    private RSAPublicKey publicKey;
+    private final RSAPublicKey publicKey;
+    private final RSAPrivateKey privateKey;
+    private final long accessExpirationMs;
+    private final long refreshExpirationMs;
 
-    @Autowired
-    private RSAPrivateKey privateKey;
-
-    @Value("${app.jwt.access-expiration-ms:900000}")
-    private long accessExpirationMs;
-
-    @Value("${app.jwt.refresh-expiration-ms:604800000}")
-    private long refreshExpirationMs;
+    public JwtTokenProvider(
+            RSAPublicKey publicKey,
+            RSAPrivateKey privateKey,
+            @Value("${app.jwt.access-expiration-ms:900000}") long accessExpirationMs,
+            @Value("${app.jwt.refresh-expiration-ms:604800000}") long refreshExpirationMs) {
+        this.publicKey = publicKey;
+        this.privateKey = privateKey;
+        this.accessExpirationMs = accessExpirationMs;
+        this.refreshExpirationMs = refreshExpirationMs;
+    }
 
     public String generateAccessToken(UserDetails userDetails) {
         Map<String, Object> claims = new HashMap<>();

@@ -11,6 +11,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
 import { Plus } from "lucide-react";
 import { Grade } from "../../types";
+import { getErrorMessage } from "../../lib/utils";
 
 export const Grades: React.FC = () => {
   const { toast } = useToast();
@@ -35,7 +36,7 @@ export const Grades: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "grades"] });
     },
     onError: (err: any) => {
-      toast(err.response?.data?.message || "Failed to create grade", "error");
+      toast(getErrorMessage(err, "Failed to create grade"), "error");
     },
   });
 
@@ -44,6 +45,23 @@ export const Grades: React.FC = () => {
     onSuccess: () => {
       toast("Grade deactivated successfully", "success", "Deactivated");
       queryClient.invalidateQueries({ queryKey: ["admin", "grades"] });
+    },
+  });
+
+  // Bug #5: reactivate an inactive grade by setting its status back to Active.
+  const activateMutation = useMutation({
+    mutationFn: (g: Grade) =>
+      adminApi.updateGrade(g.id, {
+        gradeName: g.gradeName,
+        description: g.description,
+        status: "Active",
+      }),
+    onSuccess: () => {
+      toast("Grade activated successfully", "success", "Activated");
+      queryClient.invalidateQueries({ queryKey: ["admin", "grades"] });
+    },
+    onError: (err: any) => {
+      toast(getErrorMessage(err, "Failed to activate grade"), "error");
     },
   });
 
@@ -78,9 +96,13 @@ export const Grades: React.FC = () => {
       header: "Action",
       accessor: (g: Grade) => (
         <div className="flex gap-2 justify-end">
-          {g.status === "Active" && (
+          {g.status === "Active" ? (
             <Button size="sm" variant="destructive" onClick={() => deleteMutation.mutate(g.id)}>
               Deactivate
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => activateMutation.mutate(g)}>
+              Activate
             </Button>
           )}
         </div>

@@ -16,25 +16,12 @@ public interface AdvanceRequestRepository extends JpaRepository<AdvanceRequest, 
 
     List<AdvanceRequest> findByStatusAndTripRequest_Approver_Id(AdvanceStatus status, Long approverId);
 
-    default List<AdvanceRequest> findPendingApprovals(Long managerId) {
-        return findByStatusAndTripRequest_Approver_Id(AdvanceStatus.REQUESTED, managerId);
-    }
-
     List<AdvanceRequest> findByStatusAndEmployee_IdAndTripRequest_IdAndCurrencyIgnoreCase(
         AdvanceStatus status,
         Long employeeId,
         Long tripId,
         String currency
     );
-
-    default List<AdvanceRequest> filterAdvances(
-        AdvanceStatus status,
-        Long employeeId,
-        Long tripId,
-        String currency
-    ) {
-        return findByStatusAndEmployee_IdAndTripRequest_IdAndCurrencyIgnoreCase(status, employeeId, tripId, currency);
-    }
 }
 
 

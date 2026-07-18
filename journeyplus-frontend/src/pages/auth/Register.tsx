@@ -9,6 +9,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Shield } from "lucide-react";
+import { getErrorMessage } from "../../lib/utils";
 
 const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
@@ -17,7 +18,6 @@ const registerSchema = z.object({
   name: z.string().min(1, "Full Name is required"),
   phone: z.string().min(10, "Phone number must be at least 10 digits"),
   role: z.enum(["EMPLOYEE", "TRAVEL_DESK", "APPROVING_MANAGER", "FINANCE", "COMPLIANCE", "ADMIN"]),
-  gradeId: z.string().min(1, "Grade is required"),
   departmentId: z.string().min(1, "Department is required"),
 });
 
@@ -37,7 +37,6 @@ export const Register: React.FC = () => {
     resolver: zodResolver(registerSchema),
     defaultValues: {
       role: "EMPLOYEE",
-      gradeId: "G2",
       departmentId: "DEPT-GEN",
     },
   });
@@ -57,7 +56,7 @@ export const Register: React.FC = () => {
       );
     } catch (e: any) {
       console.error(e);
-      const errMsg = e.response?.data?.message || "Registration failed. Try again.";
+      const errMsg = getErrorMessage(e, "Registration failed. Try again.");
       toast(errMsg, "error", "Error");
     } finally {
       setIsSubmitting(false);
@@ -139,7 +138,7 @@ export const Register: React.FC = () => {
             {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label htmlFor="role">Role</Label>
               <select
@@ -155,21 +154,6 @@ export const Register: React.FC = () => {
                 <option value="ADMIN">Admin</option>
               </select>
               {errors.role && <p className="text-xs text-destructive">{errors.role.message}</p>}
-            </div>
-
-            <div className="space-y-1">
-              <Label htmlFor="gradeId">Grade</Label>
-              <select
-                id="gradeId"
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground"
-                {...register("gradeId")}
-              >
-                <option value="G1">G1 - Associate</option>
-                <option value="G2">G2 - Professional</option>
-                <option value="G3">G3 - Manager</option>
-                <option value="G4">G4 - Executive</option>
-              </select>
-              {errors.gradeId && <p className="text-xs text-destructive">{errors.gradeId.message}</p>}
             </div>
 
             <div className="space-y-1">

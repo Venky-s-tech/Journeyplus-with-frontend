@@ -4,20 +4,20 @@ import com.journeyplus.iam.entity.User;
 import com.journeyplus.iam.repository.UserRepository;
 import com.journeyplus.notification.entity.Notification;
 import com.journeyplus.notification.repository.NotificationRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class StatusChangeEventListener {
 
-    @Autowired
-    private NotificationRepository notificationRepository;
+    private final NotificationRepository notificationRepository;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private UserRepository userRepository;
+    public StatusChangeEventListener(NotificationRepository notificationRepository, UserRepository userRepository) {
+        this.notificationRepository = notificationRepository;
+        this.userRepository = userRepository;
+    }
 
     @EventListener
     @Transactional

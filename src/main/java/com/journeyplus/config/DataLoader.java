@@ -1,6 +1,5 @@
 package com.journeyplus.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,14 +15,18 @@ import com.journeyplus.iam.repository.UserRepository;
 @Profile("!test")
 public class DataLoader implements CommandLineRunner {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
+    private final GradeRepository gradeRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    @Autowired
-    private GradeRepository gradeRepository;
-
-    @Autowired
-    private PasswordEncoder passwordEncoder;
+    public DataLoader(
+            UserRepository userRepository,
+            GradeRepository gradeRepository,
+            PasswordEncoder passwordEncoder) {
+        this.userRepository = userRepository;
+        this.gradeRepository = gradeRepository;
+        this.passwordEncoder = passwordEncoder;
+    }
 
     @Override
     public void run(String... args) throws Exception {

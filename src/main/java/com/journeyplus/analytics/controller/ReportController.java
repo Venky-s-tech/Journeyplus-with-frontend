@@ -2,7 +2,6 @@ package com.journeyplus.analytics.controller;
 
 import com.journeyplus.analytics.entity.TravelReport;
 import com.journeyplus.analytics.service.ReportService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -15,8 +14,11 @@ import java.util.List;
 @PreAuthorize("hasAnyRole('FINANCE', 'COMPLIANCE', 'ADMIN')")
 public class ReportController {
 
-    @Autowired
-    private ReportService reportService;
+    private final ReportService reportService;
+
+    public ReportController(ReportService reportService) {
+        this.reportService = reportService;
+    }
 
     @PostMapping
     public ResponseEntity<TravelReport> generateReport(

@@ -10,7 +10,16 @@ public class ExpenseClaimRequest {
     private LocalDate submittedDate;
     private BigDecimal totalAmount;
     private String originalCurrency;
+    private String approverUsername;
     private List<ExpenseLineRequest> expenseLines = new ArrayList<>();
+
+    public String getApproverUsername() {
+        return approverUsername;
+    }
+
+    public void setApproverUsername(String approverUsername) {
+        this.approverUsername = approverUsername;
+    }
 
     public String getClaimTitle() {
         return claimTitle;

@@ -6,11 +6,12 @@ import com.journeyplus.policy.dto.TravelPolicyResponse;
 import com.journeyplus.policy.entity.PolicyStatus;
 import com.journeyplus.policy.entity.TravelType;
 import com.journeyplus.policy.service.PolicyService;
+import com.journeyplus.iam.entity.User;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.security.Principal;
@@ -20,8 +21,11 @@ import java.util.List;
 @RequestMapping("/api/travel-policies")
 public class TravelPolicyController {
 
-    @Autowired
-    private PolicyService policyService;
+    private final PolicyService policyService;
+
+    public TravelPolicyController(PolicyService policyService) {
+        this.policyService = policyService;
+    }
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
@@ -69,20 +73,24 @@ public class TravelPolicyController {
 
     @GetMapping("/search")
     public ResponseEntity<TravelPolicyResponse> getEffectivePolicy(
-            @RequestParam String gradeId,
-            @RequestParam TravelType travelType
+            @RequestParam TravelType travelType,
+            @AuthenticationPrincipal User user
     ) {
+        // Grade is derived from the authenticated employee's profile, not supplied by the client.
+        String gradeId = (user != null && user.getGrade() != null) ? user.getGrade().getId() : null;
         TravelPolicyResponse response = policyService.getEffectivePolicy(gradeId, travelType);
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/calculate-allowance")
     public ResponseEntity<TravelAllowanceCalculationResponse> calculateAllowance(
-            @RequestParam String gradeId,
             @RequestParam TravelType travelType,
             @RequestParam String cityName,
-            @RequestParam String country
+            @RequestParam String country,
+            @AuthenticationPrincipal User user
     ) {
+        // Grade is derived from the authenticated employee's profile, not supplied by the client.
+        String gradeId = (user != null && user.getGrade() != null) ? user.getGrade().getId() : null;
         TravelAllowanceCalculationResponse response = policyService.calculateAllowance(gradeId, travelType, cityName, country);
         return ResponseEntity.ok(response);
     }

@@ -1,22 +1,37 @@
 package com.journeyplus.analytics.service;
 
+import com.journeyplus.advance.entity.AdvanceRequest;
+import com.journeyplus.advance.entity.AdvanceSettlement;
+import com.journeyplus.advance.entity.AdvanceStatus;
+import com.journeyplus.advance.repository.AdvanceRequestRepository;
+import com.journeyplus.advance.repository.AdvanceSettlementRepository;
+import com.journeyplus.analytics.dto.TopTravellerResponse;
 import com.journeyplus.analytics.entity.ReportScope;
 import com.journeyplus.analytics.entity.TravelReport;
 import com.journeyplus.analytics.repository.TravelReportRepository;
 import com.journeyplus.config.AuditAction;
+import com.journeyplus.expense.entity.ExpenseClaim;
+import com.journeyplus.expense.entity.ExpenseLine;
+import com.journeyplus.expense.entity.ExpenseLineStatus;
+import com.journeyplus.expense.entity.ExpenseStatus;
+import com.journeyplus.expense.repository.ExpenseClaimRepository;
+import com.journeyplus.expense.repository.ExpenseLineRepository;
 import com.journeyplus.iam.entity.User;
+import com.journeyplus.trip.entity.TripRequest;
+import com.journeyplus.trip.repository.TripRequestRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -24,27 +39,30 @@ public class ReportService {
 
     private static final Logger log = LoggerFactory.getLogger(ReportService.class);
 
-    @Autowired
-    private TravelReportRepository travelReportRepository;
+    private final TravelReportRepository travelReportRepository;
+    private final TripRequestRepository tripRequestRepository;
+    private final ExpenseClaimRepository expenseClaimRepository;
+    private final ExpenseLineRepository expenseLineRepository;
+    private final AdvanceRequestRepository advanceRequestRepository;
+    private final AdvanceSettlementRepository advanceSettlementRepository;
+    private final double budgetCap;
 
-    @Autowired
-    private com.journeyplus.trip.repository.TripRequestRepository tripRequestRepository;
-
-    @Autowired
-    private com.journeyplus.expense.repository.ExpenseClaimRepository expenseClaimRepository;
-
-    @Autowired
-    private com.journeyplus.expense.repository.ExpenseLineRepository expenseLineRepository;
-
-    @Autowired
-    private com.journeyplus.advance.repository.AdvanceRequestRepository advanceRequestRepository;
-
-    @Autowired
-    private com.journeyplus.advance.repository.AdvanceSettlementRepository advanceSettlementRepository;
-
-    // Temporary placeholder pending a real BudgetCap entity/source
-    @Value("${app.analytics.budget-cap:100000.00}")
-    private double budgetCap;
+    public ReportService(
+            TravelReportRepository travelReportRepository,
+            TripRequestRepository tripRequestRepository,
+            ExpenseClaimRepository expenseClaimRepository,
+            ExpenseLineRepository expenseLineRepository,
+            AdvanceRequestRepository advanceRequestRepository,
+            AdvanceSettlementRepository advanceSettlementRepository,
+            @Value("${app.analytics.budget-cap:100000.00}") double budgetCap) {
+        this.travelReportRepository = travelReportRepository;
+        this.tripRequestRepository = tripRequestRepository;
+        this.expenseClaimRepository = expenseClaimRepository;
+        this.expenseLineRepository = expenseLineRepository;
+        this.advanceRequestRepository = advanceRequestRepository;
+        this.advanceSettlementRepository = advanceSettlementRepository;
+        this.budgetCap = budgetCap;
+    }
 
     @Transactional
     @AuditAction(module = "ANALYTICS", action = "GENERATE_REPORT")
@@ -61,10 +79,10 @@ public class ReportService {
     public TravelReport generateTravelReport(ReportScope scope, String scopeValue, String generatedBy) {
         log.info("Generating travel report for scope: {}, value: {}", scope, scopeValue);
 
-        List<com.journeyplus.trip.entity.TripRequest> allTrips = tripRequestRepository.findAll();
-        List<com.journeyplus.expense.entity.ExpenseClaim> allClaims = expenseClaimRepository.findAll();
+        List<TripRequest> allTrips = tripRequestRepository.findAll();
+        List<ExpenseClaim> allClaims = expenseClaimRepository.findAll();
 
-        List<com.journeyplus.trip.entity.TripRequest> trips = allTrips.stream().filter(t -> {
+        List<TripRequest> trips = allTrips.stream().filter(t -> {
             if (scope == ReportScope.Department) {
                 return t.getEmployee() != null && scopeValue.equalsIgnoreCase(t.getEmployee().getDepartmentId());
             }
@@ -83,7 +101,7 @@ public class ReportService {
             return true;
         }).toList();
 
-        List<com.journeyplus.expense.entity.ExpenseClaim> claims = allClaims.stream().filter(c -> {
+        List<ExpenseClaim> claims = allClaims.stream().filter(c -> {
             if (scope == ReportScope.Department) {
                 return c.getEmployee() != null && scopeValue.equalsIgnoreCase(c.getEmployee().getDepartmentId());
             }
@@ -104,10 +122,10 @@ public class ReportService {
 
         long tripCount = trips.size();
         BigDecimal totalSpend = BigDecimal.ZERO;
-        for (com.journeyplus.expense.entity.ExpenseClaim c : claims) {
-            if (c.getStatus() == com.journeyplus.expense.entity.ExpenseStatus.APPROVED || 
-                c.getStatus() == com.journeyplus.expense.entity.ExpenseStatus.PAID || 
-                c.getStatus() == com.journeyplus.expense.entity.ExpenseStatus.PARTIALLY_PAID) {
+        for (ExpenseClaim c : claims) {
+            if (c.getStatus() == ExpenseStatus.APPROVED ||
+                c.getStatus() == ExpenseStatus.PAID ||
+                c.getStatus() == ExpenseStatus.PARTIALLY_PAID) {
                 totalSpend = totalSpend.add(c.getUsdEquivalent());
             }
         }
@@ -120,16 +138,16 @@ public class ReportService {
         BigDecimal totalDisbursedAdvancesUsd = BigDecimal.ZERO;
         BigDecimal totalSettledUtilisedAdvancesUsd = BigDecimal.ZERO;
 
-        for (com.journeyplus.trip.entity.TripRequest t : trips) {
-            List<com.journeyplus.advance.entity.AdvanceRequest> advRequests = advanceRequestRepository.findByTripRequest_Id(t.getId());
-            for (com.journeyplus.advance.entity.AdvanceRequest adv : advRequests) {
-                if (adv.getStatus() == com.journeyplus.advance.entity.AdvanceStatus.DISBURSED || 
-                    adv.getStatus() == com.journeyplus.advance.entity.AdvanceStatus.SETTLED) {
+        for (TripRequest t : trips) {
+            List<AdvanceRequest> advRequests = advanceRequestRepository.findByTripRequest_Id(t.getId());
+            for (AdvanceRequest adv : advRequests) {
+                if (adv.getStatus() == AdvanceStatus.DISBURSED ||
+                    adv.getStatus() == AdvanceStatus.SETTLED) {
                     BigDecimal advAmt = adv.getUsdEquivalent() != null ? adv.getUsdEquivalent() : adv.getRequestedAmount();
                     totalDisbursedAdvancesUsd = totalDisbursedAdvancesUsd.add(advAmt);
-                    
-                    List<com.journeyplus.advance.entity.AdvanceSettlement> settlements = advanceSettlementRepository.findByAdvanceRequest_Id(adv.getId());
-                    for (com.journeyplus.advance.entity.AdvanceSettlement set : settlements) {
+
+                    List<AdvanceSettlement> settlements = advanceSettlementRepository.findByAdvanceRequest_Id(adv.getId());
+                    for (AdvanceSettlement set : settlements) {
                         BigDecimal rate = adv.getUsdEquivalent() != null && adv.getRequestedAmount().compareTo(BigDecimal.ZERO) > 0 ?
                             adv.getUsdEquivalent().divide(adv.getRequestedAmount(), 4, RoundingMode.HALF_UP) : BigDecimal.ONE;
                         totalSettledUtilisedAdvancesUsd = totalSettledUtilisedAdvancesUsd.add(set.getAmountUtilised().multiply(rate));
@@ -145,11 +163,11 @@ public class ReportService {
 
         long totalLines = 0;
         long flaggedLines = 0;
-        for (com.journeyplus.expense.entity.ExpenseClaim c : claims) {
-            List<com.journeyplus.expense.entity.ExpenseLine> lines = expenseLineRepository.findByExpenseClaim_Id(c.getId());
+        for (ExpenseClaim c : claims) {
+            List<ExpenseLine> lines = expenseLineRepository.findByExpenseClaim_Id(c.getId());
             totalLines += lines.size();
-            flaggedLines += lines.stream().filter(l -> l.getStatus() == com.journeyplus.expense.entity.ExpenseLineStatus.FLAGGED || 
-                                                       l.getStatus() == com.journeyplus.expense.entity.ExpenseLineStatus.REJECTED).count();
+            flaggedLines += lines.stream().filter(l -> l.getStatus() == ExpenseLineStatus.FLAGGED ||
+                                                       l.getStatus() == ExpenseLineStatus.REJECTED).count();
         }
 
         BigDecimal policyExceptionRate = BigDecimal.ZERO;
@@ -183,15 +201,15 @@ public class ReportService {
         return travelReportRepository.save(report);
     }
 
-    public List<com.journeyplus.analytics.dto.TopTravellerResponse> getTopTravellers() {
+    public List<TopTravellerResponse> getTopTravellers() {
         log.info("Calculating Top Travellers list");
-        List<com.journeyplus.expense.entity.ExpenseClaim> allClaims = expenseClaimRepository.findAll();
-        java.util.Map<User, BigDecimal> userSpend = new java.util.HashMap<>();
+        List<ExpenseClaim> allClaims = expenseClaimRepository.findAll();
+        Map<User, BigDecimal> userSpend = new HashMap<>();
 
-        for (com.journeyplus.expense.entity.ExpenseClaim c : allClaims) {
-            if (c.getStatus() == com.journeyplus.expense.entity.ExpenseStatus.APPROVED || 
-                c.getStatus() == com.journeyplus.expense.entity.ExpenseStatus.PAID || 
-                c.getStatus() == com.journeyplus.expense.entity.ExpenseStatus.PARTIALLY_PAID) {
+        for (ExpenseClaim c : allClaims) {
+            if (c.getStatus() == ExpenseStatus.APPROVED ||
+                c.getStatus() == ExpenseStatus.PAID ||
+                c.getStatus() == ExpenseStatus.PARTIALLY_PAID) {
                 User emp = c.getEmployee();
                 if (emp != null) {
                     userSpend.put(emp, userSpend.getOrDefault(emp, BigDecimal.ZERO).add(c.getUsdEquivalent()));
@@ -200,14 +218,14 @@ public class ReportService {
         }
 
         return userSpend.entrySet().stream()
-                .map(entry -> new com.journeyplus.analytics.dto.TopTravellerResponse(
+                .map(entry -> new TopTravellerResponse(
                         entry.getKey().getId(),
                         entry.getKey().getName(),
                         entry.getKey().getEmail(),
                         entry.getKey().getDepartmentId(),
                         entry.getValue()
                 ))
-                .sorted(java.util.Comparator.comparing(com.journeyplus.analytics.dto.TopTravellerResponse::getTotalSpend).reversed())
+                .sorted(Comparator.comparing(TopTravellerResponse::getTotalSpend).reversed())
                 .limit(10)
                 .toList();
     }

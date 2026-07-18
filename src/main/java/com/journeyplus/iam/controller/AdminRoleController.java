@@ -2,7 +2,6 @@ package com.journeyplus.iam.controller;
 
 import java.util.Optional;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,8 +20,11 @@ import com.journeyplus.iam.repository.UserRepository;
 @RequestMapping("/api/admin/users")
 public class AdminRoleController {
 
-    @Autowired
-    private UserRepository userRepository;
+    private final UserRepository userRepository;
+
+    public AdminRoleController(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
 
     @PostMapping("/{id}/role")
     @PreAuthorize("hasRole('ADMIN')")

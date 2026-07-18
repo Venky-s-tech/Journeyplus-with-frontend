@@ -39,8 +39,8 @@ export const Dashboard: React.FC = () => {
   const { data: advances, isLoading: advLoading } = useAdvances(user?.role || "EMPLOYEE");
   const { data: claims, isLoading: claimsLoading } = useClaims(user?.role || "EMPLOYEE");
 
-  const { data: pendingUsers, isLoading: pUsersLoading } = usePendingUsers();
-  const { data: exceptions, isLoading: exceptionsLoading } = useExceptions("PENDING");
+  const { data: pendingUsers, isLoading: pUsersLoading } = usePendingUsers(isAdmin);
+  const { data: exceptions, isLoading: exceptionsLoading } = useExceptions("PENDING", isCompliance);
 
   if (!user) return null;
 

@@ -160,7 +160,7 @@ export const ExpensesQueue: React.FC = () => {
                 variant="outline"
                 onClick={() => {
                   setIsDialogOpen(false);
-                  setSelectedAdvanceId(null);
+                  setSelectedClaimId(null);
                 }}
               >
                 Cancel
@@ -173,8 +173,5 @@ export const ExpensesQueue: React.FC = () => {
     </div>
   );
 };
-
-// Dummy fix to prevent eslint compile errors on non-existing variables
-const setSelectedAdvanceId = (val: any) => {};
 
 export default ExpensesQueue;

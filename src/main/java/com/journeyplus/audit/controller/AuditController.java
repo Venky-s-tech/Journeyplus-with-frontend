@@ -1,8 +1,7 @@
 package com.journeyplus.audit.controller;
 
 import com.journeyplus.audit.entity.AuditLog;
-import com.journeyplus.audit.repository.AuditLogRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.journeyplus.audit.service.AuditService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -19,8 +18,11 @@ import java.util.List;
 @RequestMapping("/api/audit")
 public class AuditController {
 
-    @Autowired
-    private AuditLogRepository auditLogRepository;
+    private final AuditService auditService;
+
+    public AuditController(AuditService auditService) {
+        this.auditService = auditService;
+    }
 
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','FINANCE','COMPLIANCE')")
@@ -29,14 +31,14 @@ public class AuditController {
             @RequestParam(value = "userId", required = false) Long userId,
             @RequestParam(value = "action", required = false) String action,
             @RequestParam(value = "module", required = false) String module,
-            @RequestParam(value = "startDate", required = false) 
+            @RequestParam(value = "startDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
-            @RequestParam(value = "endDate", required = false) 
+            @RequestParam(value = "endDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "50") int size
     ) {
-        List<AuditLog> logs = auditLogRepository.searchAuditLogs(
+        List<AuditLog> logs = auditService.searchAuditLogs(
                 username, userId, action, module, startDate, endDate, PageRequest.of(page, size)
         );
         return ResponseEntity.ok(logs);

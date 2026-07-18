@@ -4,9 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useAuth } from "../../lib/auth-context";
-import { useTrips, useCreateTrip } from "../../hooks";
-import { api } from "../../lib/axios";
-import { useQuery } from "@tanstack/react-query";
+import { useTrips, useCreateTrip, useCompleteTrip } from "../../hooks";
 import { useToast } from "../../components/ui/toast";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -14,9 +12,8 @@ import { Label } from "../../components/ui/label";
 import { DataTable } from "../../components/DataTable";
 import { StatusBadge } from "../../components/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
-import { formatCurrency, formatDate } from "../../lib/utils";
+import { formatCurrency, formatDate, getErrorMessage } from "../../lib/utils";
 import { Plus, Search, Calendar, Landmark } from "lucide-react";
-import { User } from "../../types";
 
 const tripSchema = z.object({
   purpose: z.string().min(3, "Purpose must be at least 3 characters"),
@@ -41,17 +38,8 @@ export const TripsList: React.FC = () => {
 
   const { data: trips, isLoading } = useTrips(user?.role || "EMPLOYEE");
   const createMutation = useCreateTrip();
-
-  // Fetch approvers (Managers)
-  const { data: managers } = useQuery<User[]>({
-    queryKey: ["admin", "managers"],
-    queryFn: async () => {
-      const response = await api.get<User[]>("/api/users", {
-        params: { role: "APPROVING_MANAGER" },
-      });
-      return response.data;
-    },
-  });
+  const completeMutation = useCompleteTrip();
+  const isTD = user?.role === "TRAVEL_DESK";
 
   const {
     register,
@@ -81,7 +69,22 @@ export const TripsList: React.FC = () => {
         reset();
       },
       onError: (err: any) => {
-        const msg = err.response?.data?.message || "Failed to create trip";
+        const msg = getErrorMessage(err, "Failed to create trip");
+        toast(msg, "error", "Error");
+      },
+    });
+  };
+
+  // Item 1: Mark an APPROVED trip as COMPLETED directly from the list view.
+  // This mutates the trip status and relies on useCompleteTrip's cache
+  // invalidation (via react-query) to refresh the local `trips` list.
+  const handleCompleteTrip = (tripId: number) => {
+    completeMutation.mutate(tripId, {
+      onSuccess: () => {
+        toast("Trip marked as Completed", "success", "Success");
+      },
+      onError: (err: any) => {
+        const msg = getErrorMessage(err, "Failed to complete trip");
         toast(msg, "error", "Error");
       },
     });
@@ -133,9 +136,25 @@ export const TripsList: React.FC = () => {
     {
       header: "Actions",
       accessor: (t: any) => (
-        <Button size="sm" variant="outline" onClick={() => navigate(`/trips/${t.id}`)}>
-          View
-        </Button>
+        <div className="flex justify-end gap-2">
+          {/* Item 1: show a Complete button next to any APPROVED trip (Travel Desk only) */}
+          {isTD && t.status === "APPROVED" && (
+            <Button
+              size="sm"
+              className="bg-purple-600 hover:bg-purple-700"
+              disabled={completeMutation.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCompleteTrip(t.id);
+              }}
+            >
+              Complete
+            </Button>
+          )}
+          <Button size="sm" variant="outline" onClick={() => navigate(`/trips/${t.id}`)}>
+            View
+          </Button>
+        </div>
       ),
       align: "right" as const,
     },
@@ -213,18 +232,12 @@ export const TripsList: React.FC = () => {
 
                   <div className="space-y-1">
                     <Label htmlFor="approverUsername">Approver Manager</Label>
-                    <select
+                    {/* Bug #10: free-text entry for the approver manager (was a dropdown). */}
+                    <Input
                       id="approverUsername"
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring text-foreground"
+                      placeholder="e.g. manager username"
                       {...register("approverUsername")}
-                    >
-                      <option value="">Select Approver</option>
-                      {managers?.map((m) => (
-                        <option key={m.username} value={m.username}>
-                          {m.name} ({m.username})
-                        </option>
-                      ))}
-                    </select>
+                    />
                     {errors.approverUsername && <p className="text-xs text-destructive">{errors.approverUsername.message}</p>}
                   </div>
                 </div>

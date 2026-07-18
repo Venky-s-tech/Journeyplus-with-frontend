@@ -135,7 +135,7 @@ export const App: React.FC = () => {
               <Route
                 path="/expenses/:id"
                 element={
-                  <RoleGuard allowedRoles={["EMPLOYEE", "ADMIN", "APPROVING_MANAGER", "FINANCE"]}>
+                  <RoleGuard allowedRoles={["EMPLOYEE", "ADMIN", "APPROVING_MANAGER", "FINANCE", "COMPLIANCE"]}>
                     <AppShell>
                       <ExpenseDetails />
                     </AppShell>

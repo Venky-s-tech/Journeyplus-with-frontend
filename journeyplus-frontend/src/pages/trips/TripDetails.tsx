@@ -19,7 +19,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { StatusBadge } from "../../components/StatusBadge";
-import { formatCurrency, formatDate } from "../../lib/utils";
+import { formatCurrency, formatDate, getErrorMessage } from "../../lib/utils";
 import {
   Plane,
   Calendar,
@@ -102,7 +102,7 @@ export const TripDetails: React.FC = () => {
   }
 
   const isOwner = user?.username === trip.employee?.username;
-  const isApprover = user?.username === trip.approverUsername || user?.role === "APPROVING_MANAGER";
+  const isApprover = user?.username === trip.approver?.username || user?.role === "APPROVING_MANAGER";
   const isTD = user?.role === "TRAVEL_DESK";
 
   const handleAction = (mutation: any, actionName: string) => {
@@ -111,7 +111,7 @@ export const TripDetails: React.FC = () => {
         toast(`Trip request status: ${actionName}`, "success", "Success");
       },
       onError: (err: any) => {
-        const msg = err.response?.data?.message || `Failed to ${actionName.toLowerCase()} trip`;
+        const msg = getErrorMessage(err, `Failed to ${actionName.toLowerCase()} trip`);
         toast(msg, "error", "Error");
       },
     });
@@ -127,7 +127,7 @@ export const TripDetails: React.FC = () => {
           setManagerComment("");
         },
         onError: (err: any) => {
-          const msg = err.response?.data?.message || "Action failed";
+          const msg = getErrorMessage(err, "Action failed");
           toast(msg, "error", "Error");
         },
       }
@@ -162,7 +162,7 @@ export const TripDetails: React.FC = () => {
           setLegCost(0);
         },
         onError: (err: any) => {
-          const msg = err.response?.data?.message || "Failed to add leg";
+          const msg = getErrorMessage(err, "Failed to add leg");
           toast(msg, "error", "Error");
         },
       }
@@ -187,7 +187,7 @@ export const TripDetails: React.FC = () => {
           setVisaNotes("");
         },
         onError: (err: any) => {
-          const msg = err.response?.data?.message || "Failed to add visa requirement";
+          const msg = getErrorMessage(err, "Failed to add visa requirement");
           toast(msg, "error", "Error");
         },
       }
@@ -211,7 +211,7 @@ export const TripDetails: React.FC = () => {
           setSelectedLegId(null);
         },
         onError: (err: any) => {
-          const msg = err.response?.data?.message || "Booking reference must be the same as the existing booking reference";
+          const msg = getErrorMessage(err, "Booking reference must be the same as the existing booking reference");
           toast(msg, "error", "Booking Failed");
         },
       }
@@ -264,9 +264,10 @@ export const TripDetails: React.FC = () => {
           )}
 
           {/* Travel Desk actions */}
+          {/* Item 1: Complete button — shown only when status is APPROVED, Travel Desk only */}
           {isTD && trip.status === "APPROVED" && (
             <Button onClick={() => handleAction(completeMutation, "COMPLETED")} className="bg-purple-600 hover:bg-purple-700">
-              Mark as Completed
+              Complete
             </Button>
           )}
 
@@ -327,11 +328,12 @@ export const TripDetails: React.FC = () => {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Employee:</span>
-                <span className="font-medium">{trip.employee?.name || trip.employee?.username}</span>
+                {/* Backend's SimpleUserDTO for `employee` has no `name` field, only username/email/role/id - showing username here rather than a field that's never populated */}
+                <span className="font-medium">{trip.employee?.username || "—"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Approver Manager:</span>
-                <span className="font-medium">{trip.approverUsername}</span>
+                <span className="font-medium">{trip.approver?.username || "—"}</span>
               </div>
             </div>
           </div>
@@ -478,7 +480,7 @@ export const TripDetails: React.FC = () => {
                     <div className="flex items-center gap-3 ml-auto sm:ml-0">
                       <span className="font-semibold text-primary">{formatCurrency(leg.cost)}</span>
                       <StatusBadge status={leg.bookingStatus || "PENDING"} />
-                      
+
                       {isTD && leg.bookingStatus !== "BOOKED" && (
                         <Button
                           size="sm"

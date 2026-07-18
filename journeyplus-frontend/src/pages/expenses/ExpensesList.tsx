@@ -8,7 +8,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { DataTable } from "../../components/DataTable";
 import { StatusBadge } from "../../components/StatusBadge";
-import { formatCurrency, formatDate } from "../../lib/utils";
+import { formatCurrency, formatDate, getErrorMessage } from "../../lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
 import { FileSpreadsheet, Plus, AlertCircle } from "lucide-react";
 
@@ -21,18 +21,77 @@ export const ExpensesList: React.FC = () => {
   // Form state
   const [selectedTripId, setSelectedTripId] = useState("");
   const [title, setTitle] = useState("");
+  // "approver username need to ask" + "cost need to claim": the create
+  // dialog now also captures the approver and at least one initial expense
+  // line, since the backend's createExpenseClaim already supports embedding
+  // lines (claimRequest.getExpenseLines()) - it just wasn't being used.
+  const [approverUsername, setApproverUsername] = useState("");
+  const [lineCategory, setLineCategory] = useState<"ACCOMMODATION" | "MEALS" | "TRANSPORT" | "VISA" | "MISC">("MEALS");
+  const [lineDate, setLineDate] = useState("");
+  const [lineAmount, setLineAmount] = useState(0);
 
   const { data: claims, isLoading } = useClaims(user?.role || "EMPLOYEE");
   const { data: trips } = useTrips("EMPLOYEE");
   const createMutation = useCreateClaim();
 
+  // Item 3: the real backend field names (computed server-side in
+  // ExpenseService#calculateAdvanceAndNetReimbursable) are `advanceAdjusted`
+  // and `netReimbursable` - not advanceClaimed/netReimbursed.
+  const getAdvanceClaimed = (c: any) => c.advanceAdjusted ?? 0;
+  const getNetReimbursed = (c: any) => c.netReimbursable ?? c.totalAmount;
+  // ExpenseClaim.approverUsername is now a real, properly-exposed backend
+  // field (see ExpenseClaim#getApproverUsername) - fall back to the linked
+  // trip's approver only for claims created before that fix existed.
+  const getApproverUsername = (c: any) => {
+    if (c.approverUsername) return c.approverUsername;
+    const trip = trips?.find((t) => t.id === c.tripRequestId);
+    return trip?.approver?.username || "—";
+  };
+
   // Filter completed trips
   const completedTrips = trips?.filter((t) => t.status === "COMPLETED") || [];
+
+  // "if expense got approved not create again for that particular trip":
+  // block re-creating a claim once one for this trip has reached APPROVED
+  // (or beyond - PAID/PARTIALLY_PAID, which necessarily passed through
+  // APPROVED). The backend has its own separate, stricter rule (blocks a
+  // second claim once an existing one has any expense lines, regardless of
+  // status) - but that can't be reliably replicated here since the claims
+  // list endpoint never includes line data (same limitation as
+  // expenseLines elsewhere), so trying to guess it client-side ends up
+  // over-blocking legitimate creation for lineless DRAFT claims. That rarer
+  // edge case surfaces via the actual backend error message instead (see
+  // getErrorMessage / handleCreate's onError below).
+  const CLAIM_APPROVED_OR_BEYOND = ["APPROVED", "PAID", "PARTIALLY_PAID"];
+  const tripIdsWithExistingClaim = new Set(
+    (claims || [])
+      .filter((c: any) => CLAIM_APPROVED_OR_BEYOND.includes(c.status))
+      .map((c: any) => c.tripRequestId)
+  );
+
+  const selectableTrips = completedTrips.map((t) => ({
+    ...t,
+    hasApprovedClaim: tripIdsWithExistingClaim.has(t.id),
+  }));
+
+  // Auto-fill the approver from the selected trip (it's already known - the
+  // employee shouldn't have to look it up), but leave it editable in case a
+  // different approver genuinely needs to sign off this specific claim.
+  const handleTripSelect = (tripId: string) => {
+    setSelectedTripId(tripId);
+    const trip = trips?.find((t) => String(t.id) === tripId);
+    setApproverUsername(trip?.approver?.username || "");
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTripId) {
       toast("Please select a completed trip", "error");
+      return;
+    }
+
+    if (tripIdsWithExistingClaim.has(Number(selectedTripId))) {
+      toast("An expense claim has already been approved for this trip.", "error", "Not Allowed");
       return;
     }
 
@@ -43,20 +102,35 @@ export const ExpensesList: React.FC = () => {
           claimTitle: title,
           submittedDate: new Date().toISOString().split("T")[0],
           originalCurrency: "USD",
-          expenseLines: [],
+          approverUsername,
+          // "cost need to claim": capture at least one expense line right
+          // at creation instead of leaving the claim at $0 until a second
+          // trip to the Details page - the backend already supports this
+          // via ExpenseClaimRequest.expenseLines.
+          expenseLines: [
+            {
+              expenseDate: lineDate,
+              category: lineCategory,
+              amount: Number(lineAmount),
+              originalCurrency: "USD",
+            },
+          ],
         },
       },
       {
         onSuccess: (data) => {
-          toast("Expense claim folder created", "success", "Created");
+          toast("Expense claim created", "success", "Created");
           setIsOpen(false);
           setTitle("");
           setSelectedTripId("");
-          // Redirect directly to details to start adding receipt lines
+          setApproverUsername("");
+          setLineDate("");
+          setLineAmount(0);
+          // Redirect to details to add further receipt lines if needed
           navigate(`/expenses/${data.id}`);
         },
         onError: (err: any) => {
-          const msg = err.response?.data?.message || "Failed to create claim folder";
+          const msg = getErrorMessage(err, "Failed to create claim");
           toast(msg, "error", "Error");
         },
       }
@@ -69,6 +143,12 @@ export const ExpensesList: React.FC = () => {
       accessor: (c: any) => <span className="font-semibold">#{c.id}</span>,
     },
     {
+      header: "Trip ID",
+      accessor: (c: any) => (
+        <span className="font-medium">{c.tripRequestId != null ? `#${c.tripRequestId}` : "—"}</span>
+      ),
+    },
+    {
       header: "Claim Title",
       accessor: (c: any) => <span>{c.claimTitle}</span>,
     },
@@ -77,12 +157,20 @@ export const ExpensesList: React.FC = () => {
       accessor: (c: any) => <span className="text-xs">{formatDate(c.submittedDate)}</span>,
     },
     {
-      header: "Lines count",
-      accessor: (c: any) => <span className="text-xs">{c.expenseLines?.length || 0} items</span>,
-    },
-    {
       header: "Total Value",
       accessor: (c: any) => <span className="font-semibold text-primary">{formatCurrency(c.totalAmount, c.originalCurrency)}</span>,
+    },
+    {
+      header: "Advance Claimed",
+      accessor: (c: any) => <span className="text-xs">{formatCurrency(getAdvanceClaimed(c), c.originalCurrency)}</span>,
+    },
+    {
+      header: "Net Reimbursed",
+      accessor: (c: any) => <span className="font-semibold text-emerald-600">{formatCurrency(getNetReimbursed(c), c.originalCurrency)}</span>,
+    },
+    {
+      header: "Approver Username",
+      accessor: (c: any) => <span className="text-xs">{getApproverUsername(c)}</span>,
     },
     {
       header: "Status",
@@ -112,7 +200,15 @@ export const ExpensesList: React.FC = () => {
         {user?.role === "EMPLOYEE" && (
           <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 bg-purple-600 hover:bg-purple-700">
+              <Button
+                className="gap-2 bg-purple-600 hover:bg-purple-700"
+                disabled={selectableTrips.length > 0 && selectableTrips.every((t) => t.hasApprovedClaim)}
+                title={
+                  selectableTrips.length > 0 && selectableTrips.every((t) => t.hasApprovedClaim)
+                    ? "An expense claim has already been approved for this trip."
+                    : undefined
+                }
+              >
                 <Plus className="h-4 w-4" /> Create Expense Claim
               </Button>
             </DialogTrigger>
@@ -138,15 +234,26 @@ export const ExpensesList: React.FC = () => {
                       required
                       className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors text-foreground"
                       value={selectedTripId}
-                      onChange={(e) => setSelectedTripId(e.target.value)}
+                      onChange={(e) => handleTripSelect(e.target.value)}
                     >
                       <option value="">Select completed trip</option>
-                      {completedTrips.map((t) => (
-                        <option key={t.id} value={t.id}>
+                      {selectableTrips.map((t) => (
+                        <option
+                          key={t.id}
+                          value={t.id}
+                          disabled={t.hasApprovedClaim}
+                          title={t.hasApprovedClaim ? "An expense claim has already been approved for this trip." : undefined}
+                        >
                           #{t.id} - {t.destination} ({formatDate(t.departureDate)})
+                          {t.hasApprovedClaim ? " — claim already approved" : ""}
                         </option>
                       ))}
                     </select>
+                    {selectedTripId && tripIdsWithExistingClaim.has(Number(selectedTripId)) && (
+                      <p className="text-[10px] text-destructive flex items-center gap-1 pt-1">
+                        <AlertCircle className="h-3 w-3" /> An expense claim has already been approved for this trip.
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1">
@@ -160,12 +267,61 @@ export const ExpensesList: React.FC = () => {
                     />
                   </div>
 
+                  <div className="space-y-1">
+                    <Label htmlFor="approverUsername">Approver Username</Label>
+                    <Input
+                      id="approverUsername"
+                      required
+                      placeholder="e.g. manager username"
+                      value={approverUsername}
+                      onChange={(e) => setApproverUsername(e.target.value)}
+                    />
+                    <p className="text-[10px] text-muted-foreground">Auto-filled from the trip's approver - edit only if a different manager should approve this claim.</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="lineCategory">Expense Category</Label>
+                      <select
+                        id="lineCategory"
+                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors text-foreground"
+                        value={lineCategory}
+                        onChange={(e: any) => setLineCategory(e.target.value)}
+                      >
+                        <option value="ACCOMMODATION">Accommodation</option>
+                        <option value="MEALS">Meals / Food</option>
+                        <option value="TRANSPORT">Transport / Conveyance</option>
+                        <option value="VISA">Visa Fees</option>
+                        <option value="MISC">Miscellaneous</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="lineDate">Expense Date</Label>
+                      <Input id="lineDate" type="date" required value={lineDate} onChange={(e) => setLineDate(e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="lineAmount">Cost (USD)</Label>
+                    <Input
+                      id="lineAmount"
+                      type="number"
+                      required
+                      min={1}
+                      value={lineAmount}
+                      onChange={(e) => setLineAmount(Number(e.target.value))}
+                    />
+                  </div>
+
                   <div className="flex justify-end gap-2 pt-2">
                     <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit" disabled={createMutation.isPending}>
-                      {createMutation.isPending ? "Creating..." : "Create Claim Folder"}
+                    <Button
+                      type="submit"
+                      disabled={createMutation.isPending || (!!selectedTripId && tripIdsWithExistingClaim.has(Number(selectedTripId)))}
+                    >
+                      {createMutation.isPending ? "Creating..." : "Create Claim"}
                     </Button>
                   </div>
                 </form>

@@ -6,7 +6,6 @@ import com.journeyplus.iam.entity.Grade;
 import com.journeyplus.iam.repository.GradeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,8 +16,11 @@ public class GradeService {
 
     private static final Logger log = LoggerFactory.getLogger(GradeService.class);
 
-    @Autowired
-    private GradeRepository gradeRepository;
+    private final GradeRepository gradeRepository;
+
+    public GradeService(GradeRepository gradeRepository) {
+        this.gradeRepository = gradeRepository;
+    }
 
     public List<Grade> getAllGrades() {
         log.info("Fetching all grades");

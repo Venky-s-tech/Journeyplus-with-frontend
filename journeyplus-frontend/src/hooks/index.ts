@@ -206,6 +206,18 @@ export const useAdvance = (id: number) => {
   });
 };
 
+// GET /api/advances/{id}/summary - the endpoint that actually includes
+// settlement history and running totals (utilised/returned/outstanding).
+// The plain useAdvance()/GET /api/advances/{id} response does not include
+// these - use this hook for any "View advance details" UI.
+export const useAdvanceSummary = (id: number) => {
+  return useQuery({
+    queryKey: ["advance-summary", id],
+    queryFn: () => advancesApi.getAdvanceSummary(id),
+    enabled: !!id,
+  });
+};
+
 export const useRequestAdvance = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -287,6 +299,20 @@ export const useClaim = (id: number) => {
   });
 };
 
+// The backend's ExpenseClaim entity has NO expenseLines collection field -
+// GET /api/expenses/{id} never returns lines, regardless of how many exist.
+// Lines must be fetched from the dedicated GET /api/expenses/{id}/lines
+// endpoint, which is what this hook does. This is the fix for "expense
+// lines are adding but not showing": the claim response was never going to
+// contain them no matter how the claim data was reloaded.
+export const useClaimLines = (claimId: number) => {
+  return useQuery({
+    queryKey: ["claim-lines", claimId],
+    queryFn: () => expensesApi.getClaimLines(claimId),
+    enabled: !!claimId,
+  });
+};
+
 export const useCreateClaim = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -304,6 +330,7 @@ export const useAddClaimLine = (claimId: number) => {
     mutationFn: (data: any) => expensesApi.addClaimLine(claimId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-lines", claimId] });
     },
   });
 };
@@ -314,6 +341,7 @@ export const useSubmitClaimLine = (claimId: number) => {
     mutationFn: (lineId: number) => expensesApi.submitClaimLine(claimId, lineId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["claim", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-lines", claimId] });
       queryClient.invalidateQueries({ queryKey: ["exceptions"] });
     },
   });
@@ -378,10 +406,11 @@ export const useReimburseClaim = () => {
 // ==========================================
 // COMPLIANCE HOOKS
 // ==========================================
-export const useExceptions = (status?: string) => {
+export const useExceptions = (status?: string, enabled: boolean = true) => {
   return useQuery({
     queryKey: ["exceptions", status],
     queryFn: () => complianceApi.getExceptions(status),
+    enabled,
   });
 };
 
@@ -428,6 +457,10 @@ export const useReports = () => {
   return useQuery({
     queryKey: ["reports"],
     queryFn: reportsApi.getReports,
+    // Bug #9: keep analytics data current in real time.
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 };
 
@@ -446,6 +479,10 @@ export const useTopTravellers = () => {
   return useQuery({
     queryKey: ["reports", "top-travellers"],
     queryFn: reportsApi.getTopTravellers,
+    // Bug #9: refresh the analytics metrics in real time so the dashboard is never stale.
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 };
 
@@ -483,10 +520,11 @@ export const useDismissNotification = () => {
 // ==========================================
 // ADMIN HOOKS
 // ==========================================
-export const usePendingUsers = () => {
+export const usePendingUsers = (enabled: boolean = true) => {
   return useQuery({
     queryKey: ["admin", "pending-users"],
     queryFn: adminApi.getPendingUsers,
+    enabled,
   });
 };
 

@@ -6,7 +6,6 @@ import com.journeyplus.notification.entity.Notification;
 import com.journeyplus.notification.repository.NotificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -24,11 +23,13 @@ public class NotificationController {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationController.class);
 
-    @Autowired
-    private NotificationRepository notificationRepository;
+    private final NotificationRepository notificationRepository;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private UserRepository userRepository;
+    public NotificationController(NotificationRepository notificationRepository, UserRepository userRepository) {
+        this.notificationRepository = notificationRepository;
+        this.userRepository = userRepository;
+    }
 
     @GetMapping
     public ResponseEntity<Map<String, Object>> getMyNotifications(@AuthenticationPrincipal User user) {
@@ -66,7 +67,7 @@ public class NotificationController {
                 item.put("category", n.getCategory() == null ? "" : n.getCategory().name());
                 item.put("createdAt", n.getCreatedAt());
                 item.put("actor", actorSafe);
-                
+
                 out.add(item);
             }
 
@@ -135,10 +136,6 @@ public class NotificationController {
         }
     }
 
-    /**
-     * Resolve the authentication principal into a fully-loaded User entity with id.
-     * If the principal already has an id, return it. Otherwise fetch from repository by username.
-     */
     private User resolvePrincipal(User principal) {
         if (principal == null) return null;
         try {
@@ -164,7 +161,6 @@ public class NotificationController {
             try { m.put("updatedAt", u.getUpdatedAt()); } catch (Exception ignored) {}
             return m;
         } catch (Exception e) {
-            // In case the User proxy can't be initialized, fall back to minimal info
             log.warn("Failed to fully map User object: {}", e.getMessage());
             try {
                 Map<String, Object> m = new java.util.HashMap<>();
@@ -180,7 +176,6 @@ public class NotificationController {
         }
     }
 
-    // Resolve actor by id when available, otherwise fall back to actorName if provided
     private Map<String, Object> resolveActor(Long actorId, String actorName) {
         if (actorId != null) return resolveActor(actorId);
         Map<String, Object> m = new java.util.HashMap<>();
@@ -282,5 +277,3 @@ public class NotificationController {
         }
     }
 }
-
-

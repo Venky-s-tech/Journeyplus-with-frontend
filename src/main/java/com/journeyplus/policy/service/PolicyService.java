@@ -10,12 +10,12 @@ import com.journeyplus.policy.dto.*;
 import com.journeyplus.policy.entity.*;
 import com.journeyplus.policy.repository.CityTierRepository;
 import com.journeyplus.policy.repository.TravelPolicyRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -24,14 +24,18 @@ public class PolicyService {
 
     private static final Logger log = LoggerFactory.getLogger(PolicyService.class);
 
-    @Autowired
-    private TravelPolicyRepository travelPolicyRepository;
+    private final TravelPolicyRepository travelPolicyRepository;
+    private final CityTierRepository cityTierRepository;
+    private final GradeRepository gradeRepository;
 
-    @Autowired
-    private CityTierRepository cityTierRepository;
-
-    @Autowired
-    private GradeRepository gradeRepository;
+    public PolicyService(
+            TravelPolicyRepository travelPolicyRepository,
+            CityTierRepository cityTierRepository,
+            GradeRepository gradeRepository) {
+        this.travelPolicyRepository = travelPolicyRepository;
+        this.cityTierRepository = cityTierRepository;
+        this.gradeRepository = gradeRepository;
+    }
 
     // ==========================================
     // Travel Policy CRUD & Versioning
@@ -57,7 +61,7 @@ public class PolicyService {
         if (request.getStatus() == PolicyStatus.ACTIVE) {
             travelPolicyRepository.findByGrade_IdAndTravelTypeAndStatus(grade.getId(), request.getTravelType(), PolicyStatus.ACTIVE)
                     .ifPresent(existing -> {
-                        log.info("Superseding existing active policy ID: {} for grade {} and travel type {}", 
+                        log.info("Superseding existing active policy ID: {} for grade {} and travel type {}",
                                 existing.getId(), grade.getId(), request.getTravelType());
                         existing.setStatus(PolicyStatus.SUPERSEDED);
                         travelPolicyRepository.save(existing);
@@ -177,8 +181,11 @@ public class PolicyService {
     }
 
     public List<TravelPolicyResponse> searchPolicies(String gradeId, TravelType travelType, PolicyStatus status) {
-        return travelPolicyRepository.searchPolicies(gradeId, travelType, status)
+        return travelPolicyRepository.findAll()
                 .stream()
+                .filter(p -> gradeId == null || (p.getGrade() != null && gradeId.equals(p.getGrade().getId())))
+                .filter(p -> travelType == null || travelType == p.getTravelType())
+                .filter(p -> status == null || status == p.getStatus())
                 .map(TravelPolicyResponse::new)
                 .toList();
     }
@@ -195,7 +202,11 @@ public class PolicyService {
         if (tripDate == null) {
             return getEffectivePolicy(gradeId, travelType);
         }
-        List<TravelPolicy> policies = travelPolicyRepository.findEffectivePoliciesForDate(gradeId, travelType, tripDate);
+        List<TravelPolicy> policies = travelPolicyRepository.findListByGrade_IdAndTravelTypeAndStatus(gradeId, travelType, PolicyStatus.ACTIVE)
+                .stream()
+                .filter(p -> p.getEffectiveDate() != null && !p.getEffectiveDate().isAfter(tripDate))
+                .sorted(Comparator.comparing(TravelPolicy::getEffectiveDate).reversed())
+                .toList();
         if (policies.isEmpty()) {
             return getEffectivePolicy(gradeId, travelType);
         }
@@ -250,7 +261,7 @@ public class PolicyService {
         }
 
         // Uniqueness check if name/country modified
-        if (!existing.getCityName().equalsIgnoreCase(request.getCityName().trim()) || 
+        if (!existing.getCityName().equalsIgnoreCase(request.getCityName().trim()) ||
                 !existing.getCountry().equalsIgnoreCase(request.getCountry().trim())) {
             cityTierRepository.findByCityNameIgnoreCaseAndCountryIgnoreCase(request.getCityName().trim(), request.getCountry().trim())
                     .ifPresent(dup -> {
@@ -283,7 +294,10 @@ public class PolicyService {
     }
 
     public List<CityTier> searchCityTiers(CityTierType tier, String country) {
-        return cityTierRepository.searchCityTiers(tier, country);
+        return cityTierRepository.findAll().stream()
+                .filter(ct -> tier == null || tier == ct.getTier())
+                .filter(ct -> country == null || country.equalsIgnoreCase(ct.getCountry()))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     public CityCostDetailsResponse getCostDetails(String cityName, String country) {
@@ -297,7 +311,7 @@ public class PolicyService {
     // Integration Check Method
     // ==========================================
     public TravelAllowanceCalculationResponse calculateAllowance(String gradeId, TravelType travelType, String cityName, String country) {
-        log.info("Integrating entitlements for grade: {}, travelType: {}, city: {}, country: {}", 
+        log.info("Integrating entitlements for grade: {}, travelType: {}, city: {}, country: {}",
                 gradeId, travelType, cityName, country);
 
         TravelPolicyResponse policy = getEffectivePolicy(gradeId, travelType);
@@ -308,16 +322,16 @@ public class PolicyService {
         resp.setTravelType(travelType.name());
         resp.setCityName(cityName);
         resp.setCountry(country);
-        
+
         resp.setTier(cost.getTier());
         resp.setFlightClass(policy.getFlightClass());
         resp.setHotelCategory(policy.getHotelCategory());
-        
+
         // Final per diem rate can be combined or overridden (e.g. sum or tier per diem rate)
         resp.setPerDiemRate(cost.getPerDiemRate());
         resp.setHotelCapPerNight(cost.getHotelCapPerNight());
         resp.setLocalConveyanceLimit(policy.getLocalConveyanceLimit());
-        
+
         return resp;
     }
 
@@ -329,14 +343,14 @@ public class PolicyService {
     @AuditAction(module = "POLICY", action = "CREATE_POLICY")
     public TravelPolicy createPolicy(TravelPolicy policy) {
         log.info("Seeding/Creating travel policy via compatibility bridge for role: {}", policy.getEmployeeRole());
-        
+
         if (policy.getGrade() == null) {
             String gradeId = "G1";
             if (policy.getEmployeeRole() == Role.APPROVING_MANAGER) gradeId = "G3";
             else if (policy.getEmployeeRole() == Role.ADMIN) gradeId = "G6";
             else if (policy.getEmployeeRole() == Role.FINANCE) gradeId = "G4";
             else if (policy.getEmployeeRole() == Role.COMPLIANCE) gradeId = "G5";
-            
+
             Grade grade = gradeRepository.findById(gradeId).orElse(null);
             policy.setGrade(grade);
         }
@@ -365,7 +379,7 @@ public class PolicyService {
     @AuditAction(module = "POLICY", action = "CREATE_CITY_TIER")
     public CityTier createCityTier(CityTier cityTier) {
         log.info("Creating city tier via compatibility bridge for city: {}", cityTier.getCityName());
-        
+
         if (cityTier.getPerDiemRate() == null || cityTier.getPerDiemRate().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Per diem rate must be greater than zero");
         }

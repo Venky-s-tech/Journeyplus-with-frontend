@@ -6,9 +6,9 @@ import com.journeyplus.expense.entity.ExpenseStatus;
 import com.journeyplus.expense.entity.Reimbursement;
 import com.journeyplus.expense.service.ExpenseService;
 import com.journeyplus.iam.entity.User;
+import com.journeyplus.iam.repository.UserRepository;
 import com.journeyplus.trip.entity.TripRequest;
 import com.journeyplus.trip.service.TripService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -21,11 +21,15 @@ import java.util.List;
 @RequestMapping("/api/expenses")
 public class ExpenseController {
 
-    @Autowired
-    private ExpenseService expenseService;
+    private final ExpenseService expenseService;
+    private final TripService tripService;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private TripService tripService;
+    public ExpenseController(ExpenseService expenseService, TripService tripService, UserRepository userRepository) {
+        this.expenseService = expenseService;
+        this.tripService = tripService;
+        this.userRepository = userRepository;
+    }
 
     @PostMapping
     @PreAuthorize("hasRole('EMPLOYEE')")
@@ -47,6 +51,18 @@ public class ExpenseController {
         claim.setSubmittedDate(claimRequest.getSubmittedDate());
         if (claimRequest.getTotalAmount() != null) claim.setTotalAmount(new java.math.BigDecimal(claimRequest.getTotalAmount().toString()));
         claim.setOriginalCurrency(claimRequest.getOriginalCurrency());
+
+        // Approver: use an explicitly-provided approverUsername if given,
+        // otherwise default to the trip's own approver (the claim is filed
+        // against this trip, so its approving manager is already known and
+        // shouldn't need to be re-entered/re-resolved by the employee).
+        if (claimRequest.getApproverUsername() != null && !claimRequest.getApproverUsername().isBlank()) {
+            User mgr = userRepository.findByUsername(claimRequest.getApproverUsername())
+                    .orElseThrow(() -> new IllegalArgumentException("Approving manager not found: " + claimRequest.getApproverUsername()));
+            claim.setApprover(mgr);
+        } else if (trip.getApprover() != null) {
+            claim.setApprover(trip.getApprover());
+        }
 
         return ResponseEntity.ok(expenseService.createExpenseClaim(claim, claimRequest.getExpenseLines()));
     }

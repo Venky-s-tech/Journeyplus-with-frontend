@@ -1,7 +1,10 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   useTrips,
   useAdvances,
+  useAdvanceSummary,
+  useTrip,
   useClaims,
   useApproveTrip,
   useRejectTrip,
@@ -16,20 +19,36 @@ import { DataTable } from "../../components/DataTable";
 import { StatusBadge } from "../../components/StatusBadge";
 import { formatCurrency, formatDate } from "../../lib/utils";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
-import { Check, X, ShieldAlert } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
+import { Check, X, Eye, Coins } from "lucide-react";
 
 export const Approvals: React.FC = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const [commentsMap, setCommentsMap] = useState<Record<string, string>>({});
+  const [viewAdvanceId, setViewAdvanceId] = useState<number | null>(null);
 
-  // Query pending datasets
+  // Query pending datasets - these hooks already call the role-scoped
+  // "pending approvals" endpoints server-side, so no client re-filtering is
+  // needed (and for advances, re-filtering was actively wrong - see below).
   const { data: trips, isLoading: tripsLoading } = useTrips("APPROVING_MANAGER");
   const { data: advances, isLoading: advLoading } = useAdvances("APPROVING_MANAGER");
   const { data: claims, isLoading: claimsLoading } = useClaims("APPROVING_MANAGER");
 
-  // Filter local lists to pending items only
+  // "View" modal for an advance: pulls the real /summary endpoint (full
+  // settlement history + running totals) plus the linked trip's own details
+  // (destination, dates, purpose) so the manager isn't approving blind.
+  const { data: summary, isLoading: isSummaryLoading } = useAdvanceSummary(viewAdvanceId || 0);
+  const { data: summaryTrip } = useTrip(summary?.advanceDetails?.tripRequestId || 0);
+
   const pendingTrips = trips?.filter((t) => t.status === "SUBMITTED") || [];
-  const pendingAdvances = advances?.filter((a) => a.status === "PENDING_APPROVAL") || [];
+  // FIX: previously filtered on a.status === "PENDING_APPROVAL", but that
+  // status value doesn't exist anywhere in the real backend AdvanceStatus
+  // enum (REQUESTED/APPROVED/DISBURSED/SETTLED/FORFEITED) - every advance
+  // failed this check, so the Advances tab always showed empty regardless
+  // of how many were actually awaiting approval. useAdvances("APPROVING_MANAGER")
+  // already calls the server's pending-approvals endpoint, so just use it directly.
+  const pendingAdvances = advances || [];
   const pendingClaims = claims?.filter((c) => c.status === "SUBMITTED") || [];
 
   // Mutations
@@ -63,6 +82,10 @@ export const Approvals: React.FC = () => {
     approveAdvMut.mutate(id, {
       onSuccess: () => {
         toast("Travel Advance Approved", "success", "Success");
+        if (viewAdvanceId === id) setViewAdvanceId(null);
+      },
+      onError: (err: any) => {
+        toast(err.response?.data?.message || "Approval failed", "error");
       },
     });
   };
@@ -76,6 +99,9 @@ export const Approvals: React.FC = () => {
         onSuccess: () => {
           toast(approve ? "Expense Claim Approved" : "Expense Claim Rejected", "success", "Success");
         },
+        onError: (err: any) => {
+          toast(err.response?.data?.message || "Action failed", "error");
+        },
       }
     );
   };
@@ -83,7 +109,9 @@ export const Approvals: React.FC = () => {
   const tripColumns = [
     {
       header: "Employee",
-      accessor: (t: any) => <span>{t.employee?.name || t.employee?.username}</span>,
+      // FIX: SimpleUser (what the backend actually returns for `employee`)
+      // has no `name` field, only username/email/role/id.
+      accessor: (t: any) => <span>{t.employee?.username || "—"}</span>,
     },
     {
       header: "Destination",
@@ -100,6 +128,18 @@ export const Approvals: React.FC = () => {
     {
       header: "Cost",
       accessor: (t: any) => <span>{formatCurrency(t.estimatedCost)}</span>,
+    },
+    {
+      header: "Details",
+      accessor: (t: any) => (
+        // Full itinerary, visa requirements, and policy-relevant metadata
+        // live on the trip detail page, which this role already has access
+        // to (RoleGuard on /trips/:id includes APPROVING_MANAGER) - link
+        // there instead of asking the manager to approve from a bare row.
+        <Button size="sm" variant="outline" className="gap-1" onClick={() => navigate(`/trips/${t.id}`)}>
+          <Eye className="h-3.5 w-3.5" /> View
+        </Button>
+      ),
     },
     {
       header: "Comments / Action",
@@ -137,7 +177,7 @@ export const Approvals: React.FC = () => {
       accessor: (a: any) => <span className="font-semibold">#{a.tripRequestId}</span>,
     },
     {
-      header: "Requested Limit",
+      header: "Requested Amount",
       accessor: (a: any) => <span className="font-semibold">{formatCurrency(a.requestedAmount, a.currency)}</span>,
     },
     {
@@ -147,14 +187,23 @@ export const Approvals: React.FC = () => {
     {
       header: "Action",
       accessor: (a: any) => (
-        <Button
-          size="sm"
-          onClick={() => handleAdvanceApproval(a.id)}
-          className="bg-green-600 hover:bg-green-700 gap-1"
-          disabled={approveAdvMut.isPending}
-        >
-          <Check className="h-3.5 w-3.5" /> Approve
-        </Button>
+        <div className="flex gap-2 justify-end">
+          {/* Full trip context (destination, dates, purpose, estimated
+              cost) plus settlement history via the real /summary endpoint -
+              so the manager can see what this advance is actually for
+              before approving cash out. */}
+          <Button size="sm" variant="outline" className="gap-1" onClick={() => setViewAdvanceId(a.id)}>
+            <Eye className="h-3.5 w-3.5" /> View
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => handleAdvanceApproval(a.id)}
+            className="bg-green-600 hover:bg-green-700 gap-1"
+            disabled={approveAdvMut.isPending}
+          >
+            <Check className="h-3.5 w-3.5" /> Approve
+          </Button>
+        </div>
       ),
       align: "right" as const,
     },
@@ -174,11 +223,14 @@ export const Approvals: React.FC = () => {
       accessor: (c: any) => <span className="text-xs">{formatDate(c.submittedDate)}</span>,
     },
     {
-      header: "Compliance",
+      header: "Details",
       accessor: (c: any) => (
-        <span className="text-xs">
-          Lines: {c.expenseLines?.length || 0}
-        </span>
+        // Full expense line breakdown, receipts, trip context, and the
+        // advance/net-reimbursement calculation all live on this page now -
+        // "Lines: N" alone gave no basis to actually judge the claim.
+        <Button size="sm" variant="outline" className="gap-1" onClick={() => navigate(`/expenses/${c.id}`)}>
+          <Eye className="h-3.5 w-3.5" /> View
+        </Button>
       ),
     },
     {
@@ -254,6 +306,80 @@ export const Approvals: React.FC = () => {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Advance View modal: real settlement/summary data + linked trip context */}
+      <Dialog open={!!viewAdvanceId} onOpenChange={(open) => !open && setViewAdvanceId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Coins className="h-4 w-4 text-muted-foreground" /> Advance Request Details
+            </DialogTitle>
+          </DialogHeader>
+
+          {isSummaryLoading ? (
+            <div className="flex h-32 items-center justify-center">
+              <div className="h-6 w-6 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+            </div>
+          ) : summary?.advanceDetails ? (
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Requested Amount:</span>
+                <span className="font-semibold text-primary">{formatCurrency(summary.advanceDetails.requestedAmount, summary.advanceDetails.currency)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Purpose:</span>
+                <span className="font-medium text-right max-w-[60%]">{summary.advanceDetails.purposeDetails}</span>
+              </div>
+
+              {summaryTrip && (
+                <div className="pt-2 border-t mt-2 space-y-1">
+                  <span className="font-semibold block mb-1">Trip Context</span>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Destination:</span>
+                    <span className="font-medium">{summaryTrip.destination}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Purpose:</span>
+                    <span className="font-medium text-right max-w-[60%]">{summaryTrip.purpose}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Travel Dates:</span>
+                    <span className="font-medium">{formatDate(summaryTrip.departureDate)} - {formatDate(summaryTrip.returnDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Estimated Trip Cost:</span>
+                    <span className="font-medium">{formatCurrency(summaryTrip.estimatedCost)}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-7 text-xs mt-1"
+                    onClick={() => navigate(`/trips/${summaryTrip.id}`)}
+                  >
+                    Open Full Trip Record
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setViewAdvanceId(null)}>
+                  Close
+                </Button>
+                <Button
+                  className="bg-green-600 hover:bg-green-700 gap-1"
+                  disabled={approveAdvMut.isPending}
+                  onClick={() => handleAdvanceApproval(summary.advanceDetails.id)}
+                >
+                  <Check className="h-3.5 w-3.5" /> Approve
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground py-4 text-center">Unable to load advance details.</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -38,9 +38,6 @@ public class RegisterRequest {
     @Pattern(regexp = "^\\+?[0-9\\-\\s()]{10,20}$", message = "Invalid phone format")
     private String phone;
 
-    @NotBlank(message = "Grade ID is required")
-    private String gradeId;
-
     @NotBlank(message = "Department ID is required")
     private String departmentId;
 }

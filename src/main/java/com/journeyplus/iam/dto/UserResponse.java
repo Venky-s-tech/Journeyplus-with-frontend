@@ -17,6 +17,7 @@ public class UserResponse {
     private String departmentId;
     private String gradeId;
     private String status;
+    private String approvalStatus;
     private LocalDateTime createdDate;
     private LocalDateTime updatedDate;
 
@@ -36,6 +37,7 @@ public class UserResponse {
         this.departmentId = user.getDepartmentId();
         this.gradeId = user.getGrade() != null ? user.getGrade().getId() : null;
         this.status = user.getStatus();
+        this.approvalStatus = user.getApprovalStatus();
         this.createdDate = user.getCreatedDate();
         this.updatedDate = user.getUpdatedDate();
         this.delegateApproverId = user.getDelegateApprover() != null ? user.getDelegateApprover().getId() : null;

@@ -9,6 +9,10 @@ export const AuditTrail: React.FC = () => {
   const { data: logs, isLoading } = useQuery<AuditLog[]>({
     queryKey: ["admin", "audit-logs"],
     queryFn: adminApi.getAuditLogs,
+    // Bug #8: keep the audit trail current with newly generated records.
+    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const columns = [

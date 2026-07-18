@@ -1,6 +1,5 @@
 package com.journeyplus.trip.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -32,14 +31,18 @@ import java.util.stream.Collectors;
 @RestController
 public class ItineraryController {
 
-    @Autowired
-    private ItineraryLegRepository itineraryLegRepository;
+    private final ItineraryLegRepository itineraryLegRepository;
+    private final VisaRequirementRepository visaRequirementRepository;
+    private final TripService tripService;
 
-    @Autowired
-    private VisaRequirementRepository visaRequirementRepository;
-
-    @Autowired
-    private TripService tripService;
+    public ItineraryController(
+            ItineraryLegRepository itineraryLegRepository,
+            VisaRequirementRepository visaRequirementRepository,
+            TripService tripService) {
+        this.itineraryLegRepository = itineraryLegRepository;
+        this.visaRequirementRepository = visaRequirementRepository;
+        this.tripService = tripService;
+    }
 
     // ==========================================
     // ITINERARY ENDPOINTS
@@ -127,7 +130,15 @@ public class ItineraryController {
     @PreAuthorize("hasAnyRole('TRAVEL_DESK', 'ADMIN')")
     public ResponseEntity<VisaRequirementResponse> addVisaRequirement(
             @PathVariable Long tripId,
-            @Valid @RequestBody VisaRequirementInput input) {
+            @Valid @RequestBody VisaRequirementInput input,
+            @AuthenticationPrincipal User user) {
+
+        // Only Travel Desk Coordinators may create Visa Details; Admin has view-only access
+        if (user != null && user.getRole() == com.journeyplus.iam.entity.Role.ADMIN) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "You do not have permission to create Visa Details. Only Travel Desk Coordinators are allowed to perform this action.");
+        }
+
         VisaRequirement visa = new VisaRequirement();
         visa.setCountry(input.getCountry());
         visa.setVisaType(input.getVisaType());

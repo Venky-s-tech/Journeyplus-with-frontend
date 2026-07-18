@@ -8,7 +8,6 @@ import com.journeyplus.advance.service.AdvanceService;
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.trip.entity.TripRequest;
 import com.journeyplus.trip.service.TripService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,11 +21,13 @@ import java.util.stream.Collectors;
 @RestController
 public class AdvanceController {
 
-    @Autowired
-    private AdvanceService advanceService;
+    private final AdvanceService advanceService;
+    private final TripService tripService;
 
-    @Autowired
-    private TripService tripService;
+    public AdvanceController(AdvanceService advanceService, TripService tripService) {
+        this.advanceService = advanceService;
+        this.tripService = tripService;
+    }
 
     // ==========================================
     // ADVANCE REQUEST ENDPOINTS
@@ -37,7 +38,7 @@ public class AdvanceController {
     public ResponseEntity<AdvanceResponse> createAdvanceRequest(
             @Valid @RequestBody AdvanceRequestInput input,
             @AuthenticationPrincipal User employee) {
-        
+
         TripRequest trip = tripService.getTripRequest(input.getTripRequestId());
         AdvanceRequest request = new AdvanceRequest();
         request.setTripRequest(trip);
@@ -61,7 +62,7 @@ public class AdvanceController {
             @PathVariable Long id,
             @Valid @RequestBody AdvanceRequestInput input,
             @AuthenticationPrincipal User employee) {
-        
+
         AdvanceRequest updated = new AdvanceRequest();
         updated.setRequestedAmount(input.getRequestedAmount());
         updated.setCurrency(input.getCurrency());
@@ -139,7 +140,7 @@ public class AdvanceController {
             @PathVariable Long advanceId,
             @Valid @RequestBody AdvanceSettlementInput input,
             @AuthenticationPrincipal User user) {
-        
+
         AdvanceRequest request = advanceService.getAdvanceRequest(advanceId);
         // Enforce that employee can only settle their own advance
         if (user.getRole() == com.journeyplus.iam.entity.Role.EMPLOYEE && !request.getEmployee().getId().equals(user.getId())) {

@@ -1,32 +1,49 @@
 package com.journeyplus.compliance.controller;
 
+import com.journeyplus.compliance.entity.AuditOutcome;
+import com.journeyplus.compliance.entity.AuditStatus;
+import com.journeyplus.compliance.entity.ComplianceAudit;
 import com.journeyplus.compliance.entity.PolicyException;
+import com.journeyplus.compliance.repository.ComplianceAuditRepository;
 import com.journeyplus.compliance.repository.PolicyExceptionRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.journeyplus.config.AuditAction;
+import com.journeyplus.expense.entity.ExpenseClaim;
+import com.journeyplus.expense.entity.ExpenseLineStatus;
+import com.journeyplus.expense.entity.ExpenseStatus;
+import com.journeyplus.expense.repository.ExpenseClaimRepository;
+import com.journeyplus.expense.repository.ExpenseLineRepository;
+import com.journeyplus.expense.service.ExpenseService;
+import com.journeyplus.iam.entity.User;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/compliance")
 public class ComplianceController {
 
-    @Autowired
-    private PolicyExceptionRepository policyExceptionRepository;
+    private final PolicyExceptionRepository policyExceptionRepository;
+    private final ComplianceAuditRepository complianceAuditRepository;
+    private final ExpenseClaimRepository expenseClaimRepository;
+    private final ExpenseLineRepository expenseLineRepository;
+    private final ExpenseService expenseService;
 
-    @Autowired
-    private com.journeyplus.compliance.repository.ComplianceAuditRepository complianceAuditRepository;
-
-    @Autowired
-    private com.journeyplus.expense.repository.ExpenseClaimRepository expenseClaimRepository;
-
-    @Autowired
-    private com.journeyplus.expense.repository.ExpenseLineRepository expenseLineRepository;
-
-    @Autowired
-    private com.journeyplus.expense.service.ExpenseService expenseService;
+    public ComplianceController(
+            PolicyExceptionRepository policyExceptionRepository,
+            ComplianceAuditRepository complianceAuditRepository,
+            ExpenseClaimRepository expenseClaimRepository,
+            ExpenseLineRepository expenseLineRepository,
+            ExpenseService expenseService) {
+        this.policyExceptionRepository = policyExceptionRepository;
+        this.complianceAuditRepository = complianceAuditRepository;
+        this.expenseClaimRepository = expenseClaimRepository;
+        this.expenseLineRepository = expenseLineRepository;
+        this.expenseService = expenseService;
+    }
 
     @GetMapping("/exceptions")
     @PreAuthorize("hasAnyRole('COMPLIANCE','FINANCE','ADMIN')")
@@ -39,7 +56,7 @@ public class ComplianceController {
 
     @PostMapping("/exceptions/{id}/resolve")
     @PreAuthorize("hasAnyRole('COMPLIANCE','APPROVING_MANAGER')")
-    @com.journeyplus.config.AuditAction(module = "COMPLIANCE", action = "RESOLVE_EXCEPTION")
+    @AuditAction(module = "COMPLIANCE", action = "RESOLVE_EXCEPTION")
     public ResponseEntity<PolicyException> resolveException(
             @PathVariable Long id,
             @RequestParam String action,
@@ -48,14 +65,14 @@ public class ComplianceController {
         if ("APPROVE".equalsIgnoreCase(action)) {
             e.setApprovalStatus("APPROVED");
             if (e.getExpenseLine() != null) {
-                e.getExpenseLine().setStatus(com.journeyplus.expense.entity.ExpenseLineStatus.INCLUDED);
+                e.getExpenseLine().setStatus(ExpenseLineStatus.INCLUDED);
                 e.getExpenseLine().setPolicyCompliant(true);
                 expenseLineRepository.save(e.getExpenseLine());
             }
         } else if ("REJECT".equalsIgnoreCase(action)) {
             e.setApprovalStatus("REJECTED");
             if (e.getExpenseLine() != null) {
-                e.getExpenseLine().setStatus(com.journeyplus.expense.entity.ExpenseLineStatus.REJECTED);
+                e.getExpenseLine().setStatus(ExpenseLineStatus.REJECTED);
                 e.getExpenseLine().setPolicyCompliant(false);
                 expenseLineRepository.save(e.getExpenseLine());
             }
@@ -74,31 +91,31 @@ public class ComplianceController {
 
     @PostMapping("/claims/{claimId}/audit")
     @PreAuthorize("hasRole('COMPLIANCE')")
-    @com.journeyplus.config.AuditAction(module = "COMPLIANCE", action = "CREATE_CLAIM_AUDIT")
-    public ResponseEntity<com.journeyplus.compliance.entity.ComplianceAudit> auditClaim(
+    @AuditAction(module = "COMPLIANCE", action = "CREATE_CLAIM_AUDIT")
+    public ResponseEntity<ComplianceAudit> auditClaim(
             @PathVariable Long claimId,
             @RequestParam String findings,
-            @RequestParam com.journeyplus.compliance.entity.AuditOutcome outcome,
-            @RequestParam com.journeyplus.compliance.entity.AuditStatus status,
-            @org.springframework.security.core.annotation.AuthenticationPrincipal com.journeyplus.iam.entity.User auditor) {
-        
-        com.journeyplus.expense.entity.ExpenseClaim claim = expenseClaimRepository.findById(claimId)
+            @RequestParam AuditOutcome outcome,
+            @RequestParam AuditStatus status,
+            @AuthenticationPrincipal User auditor) {
+
+        ExpenseClaim claim = expenseClaimRepository.findById(claimId)
                 .orElseThrow(() -> new IllegalArgumentException("Expense claim not found"));
 
-        if (claim.getStatus() == com.journeyplus.expense.entity.ExpenseStatus.DRAFT) {
+        if (claim.getStatus() == ExpenseStatus.DRAFT) {
             throw new IllegalStateException("Only claims that have been submitted or processed can be audited");
         }
 
-        com.journeyplus.compliance.entity.ComplianceAudit audit = new com.journeyplus.compliance.entity.ComplianceAudit();
+        ComplianceAudit audit = new ComplianceAudit();
         audit.setClaim(claim);
         audit.setAuditor(auditor);
         audit.setFindings(findings);
         audit.setAuditOutcome(outcome);
         audit.setStatus(status);
-        audit.setAuditDate(java.time.LocalDateTime.now());
-        audit.setComplianceStatus(outcome == com.journeyplus.compliance.entity.AuditOutcome.Clean ? "PASSED" : "FLAG_BREACH");
-        
-        com.journeyplus.compliance.entity.ComplianceAudit saved = complianceAuditRepository.save(audit);
+        audit.setAuditDate(LocalDateTime.now());
+        audit.setComplianceStatus(outcome == AuditOutcome.Clean ? "PASSED" : "FLAG_BREACH");
+
+        ComplianceAudit saved = complianceAuditRepository.save(audit);
         return ResponseEntity.ok(saved);
     }
 }

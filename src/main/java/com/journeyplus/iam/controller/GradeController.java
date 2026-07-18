@@ -4,7 +4,6 @@ import com.journeyplus.iam.dto.GradeRequest;
 import com.journeyplus.iam.entity.Grade;
 import com.journeyplus.iam.service.GradeService;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,8 +15,11 @@ import java.util.List;
 @RequestMapping("/api/grades")
 public class GradeController {
 
-    @Autowired
-    private GradeService gradeService;
+    private final GradeService gradeService;
+
+    public GradeController(GradeService gradeService) {
+        this.gradeService = gradeService;
+    }
 
     @GetMapping
     public ResponseEntity<List<Grade>> getAllGrades() {

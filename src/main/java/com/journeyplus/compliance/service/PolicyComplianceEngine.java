@@ -11,7 +11,6 @@ import com.journeyplus.policy.entity.CityTier;
 import com.journeyplus.policy.entity.TravelPolicy;
 import com.journeyplus.policy.repository.CityTierRepository;
 import com.journeyplus.policy.repository.TravelPolicyRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.context.ApplicationEventPublisher;
 import com.journeyplus.event.StatusChangeEvent;
@@ -24,25 +23,29 @@ import java.time.LocalDate;
 @Component
 public class PolicyComplianceEngine {
 
-    @Autowired
-    private TravelPolicyRepository travelPolicyRepository;
+    private final TravelPolicyRepository travelPolicyRepository;
+    private final CityTierRepository cityTierRepository;
+    private final ComplianceAuditRepository complianceAuditRepository;
+    private final PolicyExceptionRepository policyExceptionRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    @Autowired
-    private CityTierRepository cityTierRepository;
-
-    @Autowired
-    private ComplianceAuditRepository complianceAuditRepository;
-
-    @Autowired
-    private PolicyExceptionRepository policyExceptionRepository;
-
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    public PolicyComplianceEngine(
+            TravelPolicyRepository travelPolicyRepository,
+            CityTierRepository cityTierRepository,
+            ComplianceAuditRepository complianceAuditRepository,
+            PolicyExceptionRepository policyExceptionRepository,
+            ApplicationEventPublisher eventPublisher) {
+        this.travelPolicyRepository = travelPolicyRepository;
+        this.cityTierRepository = cityTierRepository;
+        this.complianceAuditRepository = complianceAuditRepository;
+        this.policyExceptionRepository = policyExceptionRepository;
+        this.eventPublisher = eventPublisher;
+    }
 
     public void runComplianceCheck(ExpenseLine line) {
         ExpenseClaim claim = line.getExpenseClaim();
         User employee = claim.getEmployee();
-        
+
         boolean hasBreach = false;
         StringBuilder violations = new StringBuilder();
         BigDecimal exceededAmount = BigDecimal.ZERO;
@@ -57,7 +60,11 @@ public class PolicyComplianceEngine {
         }
 
         java.time.LocalDateTime tripDate = claim.getTripRequest().getDepartureDate().atStartOfDay();
-        List<TravelPolicy> policies = travelPolicyRepository.findEffectivePoliciesForDate(gradeId, travelType, tripDate);
+        List<TravelPolicy> policies = travelPolicyRepository.findListByGrade_IdAndTravelTypeAndStatus(gradeId, travelType, com.journeyplus.policy.entity.PolicyStatus.ACTIVE)
+                .stream()
+                .filter(p -> p.getEffectiveDate() != null && !p.getEffectiveDate().isAfter(tripDate))
+                .sorted(java.util.Comparator.comparing(TravelPolicy::getEffectiveDate).reversed())
+                .toList();
         if (!policies.isEmpty()) {
             matchedPolicy = policies.get(0);
         }
@@ -65,7 +72,7 @@ public class PolicyComplianceEngine {
         // 1. Check Per Diem / Local Conveyance Limits (OverEntitlement)
         boolean isOverEntitlement = false;
         BigDecimal lineLimit = BigDecimal.ZERO;
-        
+
         if (matchedPolicy != null) {
             if ("TRANSPORT".equalsIgnoreCase(line.getCategory())) {
                 lineLimit = matchedPolicy.getLocalConveyanceLimit();

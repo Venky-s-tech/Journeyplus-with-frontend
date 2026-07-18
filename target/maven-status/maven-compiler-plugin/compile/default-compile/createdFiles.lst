@@ -33,7 +33,6 @@ com\journeyplus\iam\controller\AdminUserApprovalController.class
 com\journeyplus\analytics\dto\TopTravellerResponse.class
 com\journeyplus\analytics\service\ReportService.class
 com\journeyplus\trip\dto\VisaStatus.class
-com\journeyplus\common\controller\RestExceptionHandler.class
 com\journeyplus\advance\dto\AdvanceSettlementInput.class
 com\journeyplus\iam\dto\UserUpdateRequest.class
 com\journeyplus\policy\dto\CityCostDetailsResponse.class

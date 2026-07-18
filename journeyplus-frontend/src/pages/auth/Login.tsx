@@ -9,6 +9,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Shield, Eye, EyeOff } from "lucide-react";
+import { getErrorMessage } from "../../lib/utils";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -40,7 +41,7 @@ export const Login: React.FC = () => {
       navigate("/");
     } catch (e: any) {
       console.error(e);
-      const errMsg = e.response?.data?.message || "Invalid username or password";
+      const errMsg = getErrorMessage(e, "Invalid username or password");
       toast(errMsg, "error", "Login Failed");
     } finally {
       setIsSubmitting(false);

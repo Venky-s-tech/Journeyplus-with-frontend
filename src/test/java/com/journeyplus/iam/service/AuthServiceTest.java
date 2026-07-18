@@ -26,6 +26,7 @@ import com.journeyplus.iam.entity.Role;
 import com.journeyplus.iam.entity.User;
 import com.journeyplus.iam.repository.GradeRepository;
 import com.journeyplus.iam.repository.UserRepository;
+import com.journeyplus.notification.repository.NotificationRepository;
 
 @ExtendWith(MockitoExtension.class)
 public class AuthServiceTest {
@@ -45,6 +46,9 @@ public class AuthServiceTest {
     @Mock
     private AuthenticationManager authenticationManager;
 
+    @Mock
+    private NotificationRepository notificationRepository;
+
     @InjectMocks
     private AuthService authService;
 
@@ -57,7 +61,6 @@ public class AuthServiceTest {
         request.setRole(Role.EMPLOYEE);
         request.setName("Employee Name");
         request.setPhone("1234567890");
-        request.setGradeId("G1");
         request.setDepartmentId("Engineering");
 
         Grade grade = new Grade("G1", "Junior Employee", "Junior Level", "Active");
@@ -99,7 +102,6 @@ public class AuthServiceTest {
         request.setRole(Role.APPROVING_MANAGER);
         request.setName("Manager Name");
         request.setPhone("1234567890");
-        request.setGradeId("G3");
         request.setDepartmentId("Engineering");
 
         Grade grade = new Grade("G3", "Manager", "Manager Level", "Active");
@@ -130,6 +132,33 @@ public class AuthServiceTest {
         assertEquals("managerUser", result.getUsername());
         assertFalse(result.isActive());
         verify(userRepository, times(1)).save(any(User.class));
+    }
+
+    @Test
+    public void register_AutoAssignsGradeFromRole_IgnoringClientGrade() {
+        RegisterRequest request = new RegisterRequest();
+        request.setUsername("mgrUser");
+        request.setEmail("mgruser@journeyplus.com");
+        request.setPassword("password123");
+        request.setRole(Role.APPROVING_MANAGER);
+        request.setName("Manager User");
+        request.setPhone("1234567890");
+        request.setDepartmentId("Engineering");
+
+        Grade g3 = new Grade("G3", "Manager", "Manager Level", "Active");
+
+        when(userRepository.existsByUsername(request.getUsername())).thenReturn(false);
+        when(userRepository.existsByEmail(request.getEmail())).thenReturn(false);
+        when(gradeRepository.findById("G3")).thenReturn(Optional.of(g3));
+        when(passwordEncoder.encode(request.getPassword())).thenReturn("encodedPassword");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        User result = authService.register(request);
+
+        assertNotNull(result.getGrade());
+        assertEquals("G3", result.getGrade().getId()); // mapped from APPROVING_MANAGER, not the client's G1
+        verify(gradeRepository, times(1)).findById("G3");
+        verify(gradeRepository, never()).findById("G1");
     }
 
     @Test
@@ -216,7 +245,28 @@ public class AuthServiceTest {
             authService.login(request);
         });
 
-        assertEquals("Account pending approval. Waiting for admin approval.", exception.getMessage());
+        assertEquals("Your account is pending admin approval. Please wait until an administrator approves your account.", exception.getMessage());
+    }
+
+    @Test
+    public void login_ThrowsException_Rejected() {
+        AuthRequest request = new AuthRequest();
+        request.setUsername("rejectedUser");
+        request.setPassword("password123");
+
+        User rejected = new User("rejectedUser", "rejected@journeyplus.com", "encodedPassword", Role.APPROVING_MANAGER, "Engineering");
+        rejected.setActive(false);
+        rejected.setApprovalStatus("REJECTED");
+
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class)))
+                .thenThrow(new DisabledException("Disabled"));
+        when(userRepository.findByUsername("rejectedUser")).thenReturn(Optional.of(rejected));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> {
+            authService.login(request);
+        });
+
+        assertEquals("Your account registration has been rejected. Please contact your administrator for assistance.", exception.getMessage());
     }
 
     @Test

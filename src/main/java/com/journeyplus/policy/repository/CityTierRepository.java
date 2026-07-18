@@ -15,13 +15,6 @@ public interface CityTierRepository extends JpaRepository<CityTier, Long> {
     Optional<CityTier> findByCityNameIgnoreCaseAndCountryIgnoreCase(String cityName, String country);
 
     List<CityTier> findByTierAndCountryIgnoreCase(CityTierType tier, String country);
-
-    default List<CityTier> searchCityTiers(
-            CityTierType tier,
-            String country
-    ) {
-        return findByTierAndCountryIgnoreCase(tier, country);
-    }
 }
 
 

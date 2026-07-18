@@ -6,7 +6,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { DataTable } from "../../components/DataTable";
 import { StatusBadge } from "../../components/StatusBadge";
-import { formatCurrency, formatDate } from "../../lib/utils";
+import { formatCurrency, formatDate, getErrorMessage } from "../../lib/utils";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 
 export const Audits: React.FC = () => {
@@ -37,7 +37,7 @@ export const Audits: React.FC = () => {
           setFindings("");
         },
         onError: (err: any) => {
-          toast(err.response?.data?.message || "Audit submission failed", "error");
+          toast(getErrorMessage(err, "Audit submission failed"), "error");
         },
       }
     );

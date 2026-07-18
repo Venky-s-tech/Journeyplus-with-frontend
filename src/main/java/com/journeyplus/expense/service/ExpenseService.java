@@ -7,7 +7,6 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +22,7 @@ import com.journeyplus.expense.repository.ExpenseClaimRepository;
 import com.journeyplus.expense.repository.ExpenseLineRepository;
 import com.journeyplus.expense.repository.ReimbursementRepository;
 import com.journeyplus.iam.entity.User;
+import com.journeyplus.iam.repository.UserRepository;
 import com.journeyplus.expense.dto.ExpenseLineRequest;
 import com.journeyplus.advance.repository.AdvanceRequestRepository;
 
@@ -31,29 +31,36 @@ public class ExpenseService {
 
     private static final Logger log = LoggerFactory.getLogger(ExpenseService.class);
 
-    @Autowired
-    private ExpenseClaimRepository expenseClaimRepository;
+    private final ExpenseClaimRepository expenseClaimRepository;
+    private final ExpenseLineRepository expenseLineRepository;
+    private final ReimbursementRepository reimbursementRepository;
+    private final AdvanceRequestRepository advanceRequestRepository;
+    private final com.journeyplus.trip.repository.TripRequestRepository tripRequestRepository;
+    private final com.journeyplus.advance.repository.AdvanceSettlementRepository advanceSettlementRepository;
+    private final PolicyComplianceEngine complianceEngine;
+    private final ApplicationEventPublisher eventPublisher;
+    private final UserRepository userRepository;
 
-    @Autowired
-    private ExpenseLineRepository expenseLineRepository;
-
-    @Autowired
-    private ReimbursementRepository reimbursementRepository;
-
-    @Autowired
-    private AdvanceRequestRepository advanceRequestRepository;
-
-    @Autowired
-    private com.journeyplus.trip.repository.TripRequestRepository tripRequestRepository;
-
-    @Autowired
-    private com.journeyplus.advance.repository.AdvanceSettlementRepository advanceSettlementRepository;
-
-    @Autowired
-    private PolicyComplianceEngine complianceEngine;
-
-    @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    public ExpenseService(
+            ExpenseClaimRepository expenseClaimRepository,
+            ExpenseLineRepository expenseLineRepository,
+            ReimbursementRepository reimbursementRepository,
+            AdvanceRequestRepository advanceRequestRepository,
+            com.journeyplus.trip.repository.TripRequestRepository tripRequestRepository,
+            com.journeyplus.advance.repository.AdvanceSettlementRepository advanceSettlementRepository,
+            PolicyComplianceEngine complianceEngine,
+            ApplicationEventPublisher eventPublisher,
+            UserRepository userRepository) {
+        this.expenseClaimRepository = expenseClaimRepository;
+        this.expenseLineRepository = expenseLineRepository;
+        this.reimbursementRepository = reimbursementRepository;
+        this.advanceRequestRepository = advanceRequestRepository;
+        this.tripRequestRepository = tripRequestRepository;
+        this.advanceSettlementRepository = advanceSettlementRepository;
+        this.complianceEngine = complianceEngine;
+        this.eventPublisher = eventPublisher;
+        this.userRepository = userRepository;
+    }
 
     // Standard static conversion rates for multi-currency conversion to USD
     private BigDecimal getExchangeRateToUsd(String currency) {
@@ -76,15 +83,15 @@ public class ExpenseService {
         }
 
         // Find all advance requests for the trip
-        List<com.journeyplus.advance.entity.AdvanceRequest> advances = 
+        List<com.journeyplus.advance.entity.AdvanceRequest> advances =
             advanceRequestRepository.findByTripRequest_Id(claim.getTripRequest().getId());
 
         BigDecimal totalAdvanceUsd = BigDecimal.ZERO;
         for (com.journeyplus.advance.entity.AdvanceRequest adv : advances) {
-            if (adv.getStatus() == com.journeyplus.advance.entity.AdvanceStatus.DISBURSED || 
+            if (adv.getStatus() == com.journeyplus.advance.entity.AdvanceStatus.DISBURSED ||
                 adv.getStatus() == com.journeyplus.advance.entity.AdvanceStatus.SETTLED) {
                 // Check if there are settlements for this advance request
-                List<com.journeyplus.advance.entity.AdvanceSettlement> settlements = 
+                List<com.journeyplus.advance.entity.AdvanceSettlement> settlements =
                     advanceSettlementRepository.findByAdvanceRequest_Id(adv.getId());
                 if (!settlements.isEmpty()) {
                     for (com.journeyplus.advance.entity.AdvanceSettlement set : settlements) {
@@ -137,6 +144,15 @@ public class ExpenseService {
         if (trip.getStatus() != com.journeyplus.trip.entity.TripStatus.COMPLETED) {
             throw new IllegalStateException("Expense claims can only be raised against COMPLETED trip requests");
         }
+
+        // Check if expense lines already exist for this trip
+        List<ExpenseClaim> existingClaims = expenseClaimRepository.findByTripRequest_Id(trip.getId());
+        for (ExpenseClaim existingClaim : existingClaims) {
+            if (!expenseLineRepository.findByExpenseClaim_Id(existingClaim.getId()).isEmpty()) {
+                throw new IllegalStateException("Expense lines have already been created for this trip. Duplicate expense line creation is not allowed.");
+            }
+        }
+
         claim.setTripRequest(trip);
 
         claim.setStatus(ExpenseStatus.DRAFT);
@@ -185,7 +201,7 @@ public class ExpenseService {
     @Transactional
     @AuditAction(module = "EXPENSE", action = "ADD_EXPENSE_LINE")
     public ExpenseLine addExpenseLine(Long claimId, ExpenseLine line) {
-        log.info("Attempting to add expense line of category '{}', amount '{}' {} to claim ID: {}", 
+        log.info("Attempting to add expense line of category '{}', amount '{}' {} to claim ID: {}",
                 line.getCategory(), line.getAmount(), line.getOriginalCurrency(), claimId);
 
         ExpenseClaim claim = expenseClaimRepository.findById(claimId)
@@ -256,12 +272,12 @@ public class ExpenseService {
 
         // Notify Approving Manager
         if (claim.getTripRequest().getApprovingManager() != null) {
-            log.info("Publishing status event for approving manager ID: {} for submitted claim ID: {}", 
+            log.info("Publishing status event for approving manager ID: {} for submitted claim ID: {}",
                     claim.getTripRequest().getApprovingManager().getId(), claimId);
             eventPublisher.publishEvent(new StatusChangeEvent(
                 claim.getTripRequest().getApprovingManager().getId(),
                 "Expense Claim Submitted",
-                "An expense claim titled '" + claim.getClaimTitle() + "' has been submitted by " + 
+                "An expense claim titled '" + claim.getClaimTitle() + "' has been submitted by " +
                 claim.getEmployee().getUsername() + " and is awaiting your review.",
                 claim.getEmployee() != null ? claim.getEmployee().getId() : null,
                 claim.getEmployee() != null ? claim.getEmployee().getUsername() : null,
@@ -278,7 +294,7 @@ public class ExpenseService {
     @AuditAction(module = "EXPENSE", action = "APPROVE_REJECT_EXPENSE_CLAIM")
     public ExpenseClaim approveOrRejectExpenseClaim(Long claimId, ExpenseStatus newStatus, String comments, User manager) {
         log.info("Manager '{}' attempting to set status of claim ID: {} to {}", manager.getUsername(), claimId, newStatus);
-        
+
         if (newStatus != ExpenseStatus.APPROVED && newStatus != ExpenseStatus.REJECTED) {
             throw new IllegalArgumentException("Target status must be APPROVED or REJECTED");
         }
@@ -298,8 +314,8 @@ public class ExpenseService {
         com.journeyplus.trip.entity.TripRequest trip = claim.getTripRequest();
         if (trip != null) {
             boolean isAssignedApprover = trip.getApprover() != null && trip.getApprover().getId().equals(manager.getId());
-            boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null 
-                    && trip.getApprover().getDelegateApprover().getId().equals(manager.getId()) 
+            boolean isDelegateApprover = trip.getApprover() != null && trip.getApprover().getDelegateApprover() != null
+                    && trip.getApprover().getDelegateApprover().getId().equals(manager.getId())
                     && trip.getApprover().isDelegationActive();
 
             if (!isAssignedApprover && !isDelegateApprover) {
@@ -322,6 +338,29 @@ public class ExpenseService {
             manager != null ? manager.getUsername() : null,
             com.journeyplus.notification.entity.NotificationCategory.ExpenseClaim
         ));
+
+        // After Manager approval, notify Finance users so they can process reimbursement
+        if (newStatus == ExpenseStatus.APPROVED) {
+            try {
+                List<User> financeUsers = userRepository.findAll().stream()
+                    .filter(u -> u.getRole() == com.journeyplus.iam.entity.Role.FINANCE)
+                    .toList();
+                for (User fin : financeUsers) {
+                    log.info("Publishing status event to Finance user ID: {} for approved claim ID: {}", fin.getId(), claimId);
+                    eventPublisher.publishEvent(new StatusChangeEvent(
+                        fin.getId(),
+                        "Expense Claim Approved - Pending Reimbursement",
+                        "Expense claim '" + claim.getClaimTitle() + "' by " + claim.getEmployee().getUsername() +
+                        " has been approved by manager and is ready for reimbursement.",
+                        manager != null ? manager.getId() : null,
+                        manager != null ? manager.getUsername() : null,
+                        com.journeyplus.notification.entity.NotificationCategory.ExpenseClaim
+                    ));
+                }
+            } catch (Exception e) {
+                log.warn("Failed to notify Finance users for approved claim ID: {}: {}", claimId, e.getMessage());
+            }
+        }
 
         return saved;
     }
@@ -378,7 +417,7 @@ public class ExpenseService {
         eventPublisher.publishEvent(new StatusChangeEvent(
             claim.getEmployee().getId(),
             "Expense Claim " + claim.getStatus().name(),
-            "Your expense claim '" + claim.getClaimTitle() + "' has been paid via " + 
+            "Your expense claim '" + claim.getClaimTitle() + "' has been paid via " +
             reimbursement.getPaymentMethod() + ". Status: " + claim.getStatus().name().toLowerCase().replace("_", " "),
             null,
             null,

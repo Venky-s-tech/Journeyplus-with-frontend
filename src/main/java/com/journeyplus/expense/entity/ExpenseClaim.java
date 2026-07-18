@@ -84,6 +84,8 @@ public class ExpenseClaim {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "approver_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    @JsonIgnore
     private com.journeyplus.iam.entity.User approver;
 
     public ExpenseClaim() {}
@@ -107,5 +109,20 @@ public class ExpenseClaim {
     @JsonProperty("employeeId")
     public Long getEmployeeId() {
         return employee != null ? employee.getId() : null;
+    }
+
+    // Exposes just the approver's username. Wrapped defensively because,
+    // depending on whether open-in-view is enabled, Jackson may serialize
+    // this after the request's Hibernate session has already closed -
+    // calling a real property getter (not just an id) on a still-lazy
+    // proxy at that point throws LazyInitializationException, which would
+    // otherwise 500 the entire response just for a display-only field.
+    @com.fasterxml.jackson.annotation.JsonProperty("approverUsername")
+    public String getApproverUsername() {
+        try {
+            return approver != null ? approver.getUsername() : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

@@ -11,7 +11,7 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
 import { Plus } from "lucide-react";
 import { TravelPolicy } from "../../types";
-import { formatCurrency } from "../../lib/utils";
+import { formatCurrency, getErrorMessage } from "../../lib/utils";
 
 export const Policies: React.FC = () => {
   const { toast } = useToast();
@@ -47,7 +47,7 @@ export const Policies: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "policies"] });
     },
     onError: (err: any) => {
-      toast(err.response?.data?.message || "Failed to create policy", "error");
+      toast(getErrorMessage(err, "Failed to create policy"), "error");
     },
   });
 
