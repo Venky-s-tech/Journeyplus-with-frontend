@@ -136,6 +136,9 @@ public class TripService {
         }
 
         trip.setStatus(TripStatus.SUBMITTED);
+        trip.setBookingStatus("SUBMITTED");
+        trip.setWorkflowStage("MANAGER_APPROVAL");
+        trip.setTravelDeskStatus("PENDING_APPROVAL");
         TripRequest saved = tripRequestRepository.save(trip);
 
         // Publish event for status change notification using persisted entity (saved)
@@ -199,6 +202,16 @@ public class TripService {
 
         trip.setStatus(newStatus);
         trip.setComments(comments);
+
+        if (newStatus == TripStatus.APPROVED) {
+            trip.setBookingStatus("PENDING_BOOKING");
+            trip.setWorkflowStage("TRAVEL_DESK");
+            trip.setTravelDeskStatus("QUEUED");
+        } else if (newStatus == TripStatus.REJECTED) {
+            trip.setBookingStatus("REJECTED");
+            trip.setWorkflowStage("REJECTED");
+            trip.setTravelDeskStatus("REJECTED");
+        }
         TripRequest saved = tripRequestRepository.save(trip);
 
         // Notify employee

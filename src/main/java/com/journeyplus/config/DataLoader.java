@@ -167,6 +167,9 @@ public class DataLoader implements CommandLineRunner {
             t1.setReturnDate(LocalDate.now().plusDays(14));
             t1.setEstimatedCost(new BigDecimal("2500.00"));
             t1.setStatus(TripStatus.APPROVED);
+            t1.setBookingStatus("PENDING_BOOKING");
+            t1.setWorkflowStage("TRAVEL_DESK");
+            t1.setTravelDeskStatus("QUEUED");
             t1.setComments("Manager approved. Approved for international conference.");
             tripRequestRepository.save(t1);
 
@@ -180,6 +183,9 @@ public class DataLoader implements CommandLineRunner {
             t2.setReturnDate(LocalDate.now().plusDays(6));
             t2.setEstimatedCost(new BigDecimal("950.00"));
             t2.setStatus(TripStatus.APPROVED);
+            t2.setBookingStatus("PENDING_BOOKING");
+            t2.setWorkflowStage("TRAVEL_DESK");
+            t2.setTravelDeskStatus("QUEUED");
             t2.setComments("Manager approved. Approved for domestic client review.");
             tripRequestRepository.save(t2);
         }

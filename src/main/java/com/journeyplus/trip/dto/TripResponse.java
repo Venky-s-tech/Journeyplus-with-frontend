@@ -14,6 +14,9 @@ public class TripResponse {
     private String travelType;
     private BigDecimal estimatedCost;
     private String status;
+    private String bookingStatus;
+    private String workflowStage;
+    private String travelDeskStatus;
     private String comments;
     private SimpleUserDTO approver;
     private LocalDateTime createdDate;
@@ -22,6 +25,15 @@ public class TripResponse {
     // Getters and Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    public String getBookingStatus() { return bookingStatus; }
+    public void setBookingStatus(String bookingStatus) { this.bookingStatus = bookingStatus; }
+
+    public String getWorkflowStage() { return workflowStage; }
+    public void setWorkflowStage(String workflowStage) { this.workflowStage = workflowStage; }
+
+    public String getTravelDeskStatus() { return travelDeskStatus; }
+    public void setTravelDeskStatus(String travelDeskStatus) { this.travelDeskStatus = travelDeskStatus; }
 
     public SimpleUserDTO getEmployee() { return employee; }
     public void setEmployee(SimpleUserDTO employee) { this.employee = employee; }

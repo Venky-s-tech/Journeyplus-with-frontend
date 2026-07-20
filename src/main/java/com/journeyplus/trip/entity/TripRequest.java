@@ -61,6 +61,15 @@ public class TripRequest {
     @Column(nullable = false, length = 50, columnDefinition = "VARCHAR(50)")
     private TripStatus status = TripStatus.DRAFT;
 
+    @Column(name = "booking_status", length = 50)
+    private String bookingStatus = "DRAFT";
+
+    @Column(name = "workflow_stage", length = 50)
+    private String workflowStage = "DRAFT";
+
+    @Column(name = "travel_desk_status", length = 50)
+    private String travelDeskStatus = "UNASSIGNED";
+
     @Column(columnDefinition = "TEXT")
     private String comments;
 

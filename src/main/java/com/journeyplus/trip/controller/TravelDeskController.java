@@ -287,6 +287,9 @@ public class TravelDeskController {
 
         String comments = body != null && body.get("comments") != null ? body.get("comments").toString() : "Booking confirmed by Travel Desk.";
         trip.setComments(comments);
+        trip.setBookingStatus("CONFIRMED");
+        trip.setWorkflowStage("BOOKING_CONFIRMED");
+        trip.setTravelDeskStatus("CONFIRMED");
         tripRequestRepository.save(trip);
 
         List<ItineraryLeg> legs = itineraryLegRepository.findByTripRequest_Id(tripId);
@@ -310,6 +313,8 @@ public class TravelDeskController {
         resp.put("message", "Booking confirmed successfully");
         resp.put("tripId", tripId);
         resp.put("bookingStatus", "CONFIRMED");
+        resp.put("workflowStage", "BOOKING_CONFIRMED");
+        resp.put("travelDeskStatus", "CONFIRMED");
         resp.put("comments", comments);
         return ResponseEntity.ok(resp);
     }
@@ -327,11 +332,14 @@ public class TravelDeskController {
         m.put("purpose", t.getPurpose());
         m.put("estimatedCost", t.getEstimatedCost());
         m.put("status", t.getStatus().name());
+        m.put("workflowStage", t.getWorkflowStage() != null ? t.getWorkflowStage() : "TRAVEL_DESK");
+        m.put("travelDeskStatus", t.getTravelDeskStatus() != null ? t.getTravelDeskStatus() : "QUEUED");
 
         List<ItineraryLeg> legs = itineraryLegRepository.findByTripRequest_Id(t.getId());
         boolean hasLegs = !legs.isEmpty();
         boolean legsConfirmed = hasLegs && legs.stream().allMatch(l -> l.getStatus() == ItineraryStatus.CONFIRMED);
-        m.put("bookingStatus", legsConfirmed ? "CONFIRMED" : (hasLegs ? "IN_PROGRESS" : "PENDING"));
+        String bStatus = legsConfirmed ? "CONFIRMED" : (hasLegs ? "IN_PROGRESS" : (t.getBookingStatus() != null ? t.getBookingStatus() : "PENDING_BOOKING"));
+        m.put("bookingStatus", bStatus);
 
         List<VisaRequirement> visas = visaRequirementRepository.findByTripRequest_Id(t.getId());
         if ("INTERNATIONAL".equalsIgnoreCase(t.getTravelType())) {

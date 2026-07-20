@@ -364,6 +364,9 @@ public class TripRequestController {
         r.setTravelType(t.getTravelType());
         r.setEstimatedCost(t.getEstimatedCost());
         r.setStatus(t.getStatus() != null ? t.getStatus().name() : null);
+        r.setBookingStatus(t.getBookingStatus() != null ? t.getBookingStatus() : (t.getStatus() == TripStatus.APPROVED ? "PENDING_BOOKING" : "PENDING"));
+        r.setWorkflowStage(t.getWorkflowStage() != null ? t.getWorkflowStage() : (t.getStatus() == TripStatus.APPROVED ? "TRAVEL_DESK" : "DRAFT"));
+        r.setTravelDeskStatus(t.getTravelDeskStatus() != null ? t.getTravelDeskStatus() : (t.getStatus() == TripStatus.APPROVED ? "QUEUED" : "UNASSIGNED"));
         r.setComments(t.getComments());
         r.setApprover(toSimpleUser(t.getApprover()));
         r.setCreatedDate(t.getCreatedDate());
