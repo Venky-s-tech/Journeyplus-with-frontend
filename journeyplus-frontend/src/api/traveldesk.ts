@@ -32,67 +32,114 @@ export interface TravelDeskQueueItem {
   visaStatus: string;
 }
 
-export const getTravelDeskDashboard = async (): Promise<TravelDeskMetrics> => {
-  const response = await api.get<any>("/api/dashboard/summary", {
-    params: { role: "TRAVEL_DESK" },
+export const getPendingBookings = async (): Promise<TravelDeskQueueItem[]> => {
+  const tripsResponse = await api.get<any[]>("/api/trips", {
+    params: { status: "APPROVED" },
   });
+
+  const queueItems: TravelDeskQueueItem[] = [];
+  for (const t of tripsResponse.data) {
+    let itineraryLegs: any[] = [];
+    try {
+      const legResp = await api.get(`/api/trips/${t.id}/itinerary`);
+      itineraryLegs = legResp.data || [];
+    } catch (e) {
+      itineraryLegs = [];
+    }
+
+    let visaStatus = "NOT_REQUIRED";
+    if (t.travelType === "INTERNATIONAL") {
+      try {
+        const visaResp = await api.get(`/api/trips/${t.id}/visa`);
+        const visas = visaResp.data || [];
+        if (visas.length > 0) {
+          visaStatus = visas[0].status || "PENDING";
+        } else {
+          visaStatus = "REQUIRED";
+        }
+      } catch (e) {
+        visaStatus = "REQUIRED";
+      }
+    }
+
+    const hasLegs = itineraryLegs.length > 0;
+    const allBooked = hasLegs && itineraryLegs.every((l: any) => l.status === "CONFIRMED");
+
+    // If NO itinerary exists, or not all legs are booked, display in Booking Queue
+    if (!hasLegs || !allBooked) {
+      queueItems.push({
+        tripId: t.id,
+        id: t.id,
+        employeeName: t.employee?.name || t.employee?.username || "Employee",
+        department: "Engineering",
+        destination: t.destination,
+        travelType: t.travelType,
+        departureDate: t.departureDate,
+        returnDate: t.returnDate,
+        purpose: t.purpose,
+        estimatedCost: t.estimatedCost,
+        status: t.status,
+        bookingStatus: hasLegs ? (allBooked ? "CONFIRMED" : "IN_PROGRESS") : "PENDING",
+        visaStatus,
+      });
+    }
+  }
+
+  return queueItems;
+};
+
+export const getTravelDeskDashboard = async (): Promise<TravelDeskMetrics> => {
+  const allApprovedTripsResp = await api.get<any[]>("/api/trips", {
+    params: { status: "APPROVED" },
+  });
+
+  let waitingForItinerary = 0;
+  let waitingForVisa = 0;
+  let completedBookings = 0;
+
+  for (const t of allApprovedTripsResp.data) {
+    let legs: any[] = [];
+    try {
+      const lResp = await api.get(`/api/trips/${t.id}/itinerary`);
+      legs = lResp.data || [];
+    } catch (e) {
+      legs = [];
+    }
+
+    if (legs.length === 0) {
+      waitingForItinerary++;
+    } else if (legs.every((l: any) => l.status === "CONFIRMED")) {
+      completedBookings++;
+    }
+
+    if (t.travelType === "INTERNATIONAL") {
+      try {
+        const vResp = await api.get(`/api/trips/${t.id}/visa`);
+        const visas = vResp.data || [];
+        if (visas.length === 0 || visas.some((v: any) => v.status !== "GRANTED" && v.status !== "APPROVED")) {
+          waitingForVisa++;
+        }
+      } catch (e) {
+        waitingForVisa++;
+      }
+    }
+  }
+
   return {
-    pendingBookings: response.data?.pendingBookings || 0,
-    completedBookings: response.data?.completedItineraries || 0,
-    waitingForItinerary: response.data?.pendingBookings || 0,
-    waitingForVisa: response.data?.visaRequests || 0,
+    pendingBookings: waitingForItinerary,
+    completedBookings,
+    waitingForItinerary,
+    waitingForVisa,
     todaysTravel: 0,
-    upcomingTravel: response.data?.upcomingTrips || 0,
-    internationalTrips: response.data?.travelRequests || 0,
-    domesticTrips: 0,
-    recentlyCompleted: response.data?.completedItineraries || 0,
-    flightBookings: response.data?.flightBookings || 0,
-    hotelBookings: response.data?.hotelBookings || 0,
-    visaRequests: response.data?.visaRequests || 0,
-    completedItineraries: response.data?.completedItineraries || 0,
+    upcomingTravel: allApprovedTripsResp.data.length,
+    internationalTrips: allApprovedTripsResp.data.filter((t: any) => t.travelType === "INTERNATIONAL").length,
+    domesticTrips: allApprovedTripsResp.data.filter((t: any) => t.travelType === "DOMESTIC").length,
+    recentlyCompleted: completedBookings,
   };
 };
 
-export const getPendingBookings = async (): Promise<TravelDeskQueueItem[]> => {
-  const response = await api.get<any[]>("/api/trips", {
-    params: { status: "APPROVED" },
-  });
-  return response.data.map((t: any) => ({
-    tripId: t.id,
-    id: t.id,
-    employeeName: t.employee?.username || t.employee?.name || "Employee",
-    department: "Engineering",
-    destination: t.destination,
-    travelType: t.travelType,
-    departureDate: t.departureDate,
-    returnDate: t.returnDate,
-    purpose: t.purpose,
-    estimatedCost: t.estimatedCost,
-    status: t.status,
-    bookingStatus: t.bookingStatus || "PENDING_BOOKING",
-    visaStatus: t.travelType === "INTERNATIONAL" ? "REQUIRED" : "NOT_REQUIRED",
-  }));
-};
-
 export const getUpcomingBookings = async (): Promise<TravelDeskQueueItem[]> => {
-  const response = await api.get<any[]>("/api/trips", {
-    params: { status: "APPROVED" },
-  });
-  return response.data.map((t: any) => ({
-    tripId: t.id,
-    id: t.id,
-    employeeName: t.employee?.username || t.employee?.name || "Employee",
-    department: "Engineering",
-    destination: t.destination,
-    travelType: t.travelType,
-    departureDate: t.departureDate,
-    returnDate: t.returnDate,
-    purpose: t.purpose,
-    estimatedCost: t.estimatedCost,
-    status: t.status,
-    bookingStatus: t.bookingStatus || "PENDING_BOOKING",
-    visaStatus: t.travelType === "INTERNATIONAL" ? "REQUIRED" : "NOT_REQUIRED",
-  }));
+  return getPendingBookings();
 };
 
 export const addItineraryLeg = async (tripId: number, data: any): Promise<any> => {
@@ -107,6 +154,11 @@ export const updateItineraryLeg = async (tripId: number, legId: number, data: an
 
 export const deleteItineraryLeg = async (tripId: number, legId: number): Promise<any> => {
   const response = await api.delete(`/api/itinerary/${legId}`);
+  return response.data;
+};
+
+export const bookItineraryLeg = async (tripId: number, legId: number, data: any): Promise<any> => {
+  const response = await api.post(`/api/trips/${tripId}/legs/${legId}/book`, data);
   return response.data;
 };
 
@@ -126,6 +178,26 @@ export const confirmBooking = async (tripId: number, comments?: string): Promise
 };
 
 export const getTripTravelDetails = async (tripId: number): Promise<any> => {
-  const response = await api.get(`/api/trips/${tripId}/travel-details`);
-  return response.data;
+  const tripResp = await api.get(`/api/trips/${tripId}`);
+  const legsResp = await api.get(`/api/trips/${tripId}/itinerary`);
+  const visasResp = await api.get(`/api/trips/${tripId}/visa`);
+
+  const legs = legsResp.data || [];
+  const visas = visasResp.data || [];
+  const trip = tripResp.data;
+
+  const hasLegs = legs.length > 0;
+  const allConfirmed = hasLegs && legs.every((l: any) => l.status === "CONFIRMED");
+  const pnr = legs.find((l: any) => l.bookingRef)?.bookingRef || "PNR-PENDING";
+
+  return {
+    trip,
+    itineraryLegs: legs,
+    visaRequirements: visas,
+    bookingStatus: allConfirmed ? "CONFIRMED" : (hasLegs ? "IN_PROGRESS" : "PENDING"),
+    travelRemarks: trip.comments || "No remarks.",
+    pnr,
+    bookingRef: pnr,
+    ticketNumber: `TKT-${tripId}-${tripId * 100}`,
+  };
 };

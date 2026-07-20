@@ -520,3 +520,16 @@
 2026-07-20T23:10:55.654+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-8] c.journeyplus.iam.service.UserService    : Fetching user by ID: 5
 2026-07-20T23:10:55.766+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-5] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
 2026-07-20T23:11:10.845+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-5] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:16:01.633+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-2] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:18:46.135+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-9] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:18:48.534+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-8] c.journeyplus.iam.service.AuthService    : Token refresh attempt started
+2026-07-20T23:18:48.534+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-4] c.journeyplus.iam.service.AuthService    : Token refresh attempt started
+2026-07-20T23:18:48.546+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-8] c.journeyplus.iam.service.AuthService    : Token refresh successful for user 'venky_traveldesk'
+2026-07-20T23:18:48.546+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-4] c.journeyplus.iam.service.AuthService    : Token refresh successful for user 'venky_traveldesk'
+2026-07-20T23:18:48.566+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-1] c.journeyplus.iam.service.UserService    : Fetching user by ID: 5
+2026-07-20T23:18:48.587+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-10] c.journeyplus.iam.service.UserService    : Fetching user by ID: 5
+2026-07-20T23:18:48.683+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-6] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:19:03.736+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-3] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:19:18.755+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-8] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:19:33.782+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-7] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:20:38.744+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-2] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
