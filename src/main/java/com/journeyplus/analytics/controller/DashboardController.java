@@ -69,6 +69,172 @@ public class DashboardController {
         this.complianceAuditRepository = complianceAuditRepository;
     }
 
+    @GetMapping("/admin")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> getAdminDashboard() {
+        List<User> allUsers = userRepository.findAll();
+        List<TripRequest> allTrips = tripRequestRepository.findAll();
+        List<ExpenseClaim> allClaims = expenseClaimRepository.findAll();
+        List<AdvanceRequest> allAdvances = advanceRequestRepository.findAll();
+
+        BigDecimal totalClaimAmt = allClaims.stream()
+                .map(c -> c.getUsdEquivalent() != null ? c.getUsdEquivalent() : (c.getTotalAmount() != null ? c.getTotalAmount() : BigDecimal.ZERO))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("totalUsers", allUsers.size());
+        summary.put("activeUsers", allUsers.stream().filter(User::isActive).count());
+        summary.put("inactiveUsers", allUsers.stream().filter(u -> !u.isActive()).count());
+        summary.put("pendingUserApprovals", allUsers.stream().filter(u -> "PENDING".equalsIgnoreCase(u.getApprovalStatus())).count());
+
+        summary.put("totalTrips", allTrips.size());
+        summary.put("draftTrips", allTrips.stream().filter(t -> t.getStatus() == TripStatus.DRAFT).count());
+        summary.put("submittedTrips", allTrips.stream().filter(t -> t.getStatus() == TripStatus.SUBMITTED).count());
+        summary.put("approvedTrips", allTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).count());
+        summary.put("rejectedTrips", allTrips.stream().filter(t -> t.getStatus() == TripStatus.REJECTED).count());
+        summary.put("completedTrips", allTrips.stream().filter(t -> t.getStatus() == TripStatus.COMPLETED).count());
+        summary.put("cancelledTrips", allTrips.stream().filter(t -> t.getStatus() == TripStatus.CANCELLED).count());
+
+        summary.put("totalExpenseClaims", allClaims.size());
+        summary.put("pendingExpenseClaims", allClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.SUBMITTED).count());
+        summary.put("approvedExpenseClaims", allClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.APPROVED).count());
+        summary.put("rejectedExpenseClaims", allClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.REJECTED).count());
+        summary.put("paidClaims", allClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.PAID).count());
+        summary.put("totalExpenseAmount", totalClaimAmt);
+
+        summary.put("totalAdvances", allAdvances.size());
+        summary.put("pendingAdvances", allAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.REQUESTED).count());
+        summary.put("approvedAdvances", allAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.APPROVED).count());
+        summary.put("disbursedAdvances", allAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.DISBURSED).count());
+        summary.put("settledAdvances", allAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.SETTLED).count());
+
+        summary.put("totalPolicies", travelPolicyRepository.count());
+        summary.put("activePolicies", travelPolicyRepository.count());
+        summary.put("unreadNotifications", 0);
+        summary.put("totalComplianceCases", policyExceptionRepository.count());
+
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping("/employee")
+    public ResponseEntity<Map<String, Object>> getEmployeeDashboard(@AuthenticationPrincipal User user) {
+        Long userId = user != null ? user.getId() : 1L;
+
+        List<TripRequest> myTrips = tripRequestRepository.findByEmployee_Id(userId);
+        List<ExpenseClaim> myClaims = expenseClaimRepository.findByEmployee_Id(userId);
+        List<AdvanceRequest> myAdvances = advanceRequestRepository.findByEmployee_Id(userId);
+
+        BigDecimal activeAdvSum = myAdvances.stream()
+                .filter(a -> a.getStatus() == AdvanceStatus.DISBURSED)
+                .map(a -> a.getUsdEquivalent() != null ? a.getUsdEquivalent() : a.getRequestedAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("myTrips", myTrips.size());
+        summary.put("upcomingTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).count());
+        summary.put("pendingTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.SUBMITTED).count());
+        summary.put("approvedTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).count());
+        summary.put("rejectedTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.REJECTED).count());
+        summary.put("completedTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.COMPLETED).count());
+
+        summary.put("myExpenseClaims", myClaims.size());
+        summary.put("pendingClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.SUBMITTED).count());
+        summary.put("approvedClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.APPROVED).count());
+        summary.put("rejectedClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.REJECTED).count());
+        summary.put("paidClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.PAID).count());
+
+        summary.put("myAdvances", myAdvances.size());
+        summary.put("pendingAdvances", myAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.REQUESTED).count());
+        summary.put("approvedAdvances", myAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.APPROVED).count());
+        summary.put("activeCashAdvanceAmount", activeAdvSum);
+
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping("/manager")
+    public ResponseEntity<Map<String, Object>> getManagerDashboard(@AuthenticationPrincipal User user) {
+        Long managerId = user != null ? user.getId() : 1L;
+        List<TripRequest> managerTrips = tripRequestRepository.findByApprover_Id(managerId);
+        List<ExpenseClaim> allClaims = expenseClaimRepository.findAll();
+        List<AdvanceRequest> allAdvances = advanceRequestRepository.findAll();
+
+        BigDecimal teamExpenseAmt = allClaims.stream()
+                .filter(c -> c.getStatus() == ExpenseStatus.APPROVED || c.getStatus() == ExpenseStatus.PAID)
+                .map(c -> c.getUsdEquivalent() != null ? c.getUsdEquivalent() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("tripsAwaitingApproval", managerTrips.stream().filter(t -> t.getStatus() == TripStatus.SUBMITTED).count());
+        summary.put("expenseClaimsAwaitingApproval", allClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.SUBMITTED).count());
+        summary.put("advanceRequestsAwaitingApproval", allAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.REQUESTED).count());
+        summary.put("teamTripCount", managerTrips.size());
+        summary.put("teamExpenseAmount", teamExpenseAmt);
+        summary.put("employeesCurrentlyTravelling", managerTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).count());
+        summary.put("recentApprovals", managerTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED || t.getStatus() == TripStatus.REJECTED).count());
+
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping("/finance")
+    public ResponseEntity<Map<String, Object>> getFinanceDashboard() {
+        List<ExpenseClaim> allClaims = expenseClaimRepository.findAll();
+        List<AdvanceRequest> allAdvances = advanceRequestRepository.findAll();
+
+        BigDecimal monthlyReimbursementAmt = allClaims.stream()
+                .filter(c -> c.getStatus() == ExpenseStatus.PAID)
+                .map(c -> c.getUsdEquivalent() != null ? c.getUsdEquivalent() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal monthlyAdvAmt = allAdvances.stream()
+                .filter(a -> a.getStatus() == AdvanceStatus.DISBURSED || a.getStatus() == AdvanceStatus.SETTLED)
+                .map(a -> a.getUsdEquivalent() != null ? a.getUsdEquivalent() : a.getRequestedAmount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("pendingReimbursements", allClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.APPROVED).count());
+        summary.put("pendingDisbursements", allAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.APPROVED).count());
+        summary.put("processedPayments", allClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.PAID).count());
+        summary.put("failedPayments", 0);
+        summary.put("monthlyReimbursementAmount", monthlyReimbursementAmt);
+        summary.put("monthlyAdvanceAmount", monthlyAdvAmt);
+        summary.put("totalBudgetAllocated", new BigDecimal("1000000.00"));
+        summary.put("totalDisbursedAdvances", monthlyAdvAmt);
+
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping("/traveldesk")
+    public ResponseEntity<Map<String, Object>> getTravelDeskDashboard() {
+        List<TripRequest> allTrips = tripRequestRepository.findAll();
+        List<TripRequest> approvedTrips = allTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).collect(Collectors.toList());
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("pendingBookings", approvedTrips.size());
+        summary.put("upcomingTrips", approvedTrips.size());
+        summary.put("completedItineraries", allTrips.stream().filter(t -> t.getStatus() == TripStatus.COMPLETED).count());
+        summary.put("visaRequests", visaRequirementRepository.count());
+        summary.put("travelRequests", allTrips.size());
+        summary.put("flightBookings", itineraryLegRepository.count());
+        summary.put("hotelBookings", itineraryLegRepository.count());
+
+        return ResponseEntity.ok(summary);
+    }
+
+    @GetMapping("/compliance")
+    public ResponseEntity<Map<String, Object>> getComplianceDashboard() {
+        List<PolicyException> exceptions = policyExceptionRepository.findAll();
+
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("openExceptions", exceptions.stream().filter(e -> "PENDING".equalsIgnoreCase(e.getApprovalStatus())).count());
+        summary.put("closedExceptions", exceptions.stream().filter(e -> !"PENDING".equalsIgnoreCase(e.getApprovalStatus())).count());
+        summary.put("escalatedExceptions", exceptions.stream().filter(e -> "REJECTED".equalsIgnoreCase(e.getApprovalStatus())).count());
+        summary.put("policyViolations", exceptions.size());
+        summary.put("highValueClaims", expenseClaimRepository.findAll().stream().filter(c -> c.getTotalAmount() != null && c.getTotalAmount().compareTo(new BigDecimal("5000")) >= 0).count());
+        summary.put("auditSummaryCount", complianceAuditRepository.count());
+
+        return ResponseEntity.ok(summary);
+    }
+
     @GetMapping("/summary")
     public ResponseEntity<Map<String, Object>> getDashboardSummary(
             @RequestParam(required = false) Role role,
@@ -76,122 +242,21 @@ public class DashboardController {
             @AuthenticationPrincipal User user) {
 
         Role effectiveRole = role != null ? role : user.getRole();
-        Long effectiveUserId = userId != null ? userId : user.getId();
-
-        Map<String, Object> summary = new HashMap<>();
-        summary.put("role", effectiveRole.name());
-        summary.put("userId", effectiveUserId);
-
         switch (effectiveRole) {
-            case EMPLOYEE:
-                List<TripRequest> myTrips = tripRequestRepository.findByEmployee_Id(effectiveUserId);
-                List<ExpenseClaim> myClaims = expenseClaimRepository.findByEmployee_Id(effectiveUserId);
-                List<AdvanceRequest> myAdvances = advanceRequestRepository.findByEmployee_Id(effectiveUserId);
-
-                summary.put("totalTrips", myTrips.size());
-                summary.put("upcomingTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).count());
-                summary.put("draftTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.DRAFT).count());
-                summary.put("pendingApprovalTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.SUBMITTED).count());
-                summary.put("approvedTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).count());
-                summary.put("rejectedTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.REJECTED).count());
-                summary.put("completedTrips", myTrips.stream().filter(t -> t.getStatus() == TripStatus.COMPLETED).count());
-
-                summary.put("totalExpenseClaims", myClaims.size());
-                summary.put("draftClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.DRAFT).count());
-                summary.put("submittedClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.SUBMITTED).count());
-                summary.put("approvedClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.APPROVED).count());
-                summary.put("rejectedClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.REJECTED).count());
-                summary.put("paidClaims", myClaims.stream().filter(c -> c.getStatus() == ExpenseStatus.PAID).count());
-
-                summary.put("advanceRequests", myAdvances.size());
-                summary.put("pendingAdvances", myAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.REQUESTED).count());
-                summary.put("approvedAdvances", myAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.APPROVED).count());
-                summary.put("settledAdvances", myAdvances.stream().filter(a -> a.getStatus() == AdvanceStatus.SETTLED).count());
-                
-                BigDecimal activeAdvanceSum = myAdvances.stream()
-                        .filter(a -> a.getStatus() == AdvanceStatus.DISBURSED)
-                        .map(a -> a.getUsdEquivalent() != null ? a.getUsdEquivalent() : a.getRequestedAmount())
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                summary.put("activeCashAdvanceAmount", activeAdvanceSum);
-                break;
-
-            case APPROVING_MANAGER:
-                List<TripRequest> managerTrips = tripRequestRepository.findByApprover_Id(effectiveUserId);
-                summary.put("pendingTripApprovals", managerTrips.stream().filter(t -> t.getStatus() == TripStatus.SUBMITTED).count());
-                
-                List<ExpenseClaim> allClaimsManager = expenseClaimRepository.findAll();
-                summary.put("pendingExpenseApprovals", allClaimsManager.stream().filter(c -> c.getStatus() == ExpenseStatus.SUBMITTED).count());
-
-                List<AdvanceRequest> allAdvancesManager = advanceRequestRepository.findAll();
-                summary.put("pendingAdvanceRequests", allAdvancesManager.stream().filter(a -> a.getStatus() == AdvanceStatus.REQUESTED).count());
-
-                summary.put("teamTravelSummaryCount", managerTrips.size());
-                summary.put("teamExpenseSummaryCount", allClaimsManager.size());
-
-                long travellingNow = managerTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).count();
-                summary.put("employeesCurrentlyTravelling", travellingNow);
-                break;
-
-            case TRAVEL_DESK:
-                List<TripRequest> approvedTripsTD = tripRequestRepository.findAll().stream()
-                        .filter(t -> t.getStatus() == TripStatus.APPROVED)
-                        .collect(Collectors.toList());
-                summary.put("pendingBookings", approvedTripsTD.size());
-                summary.put("flightBookings", itineraryLegRepository.count());
-                summary.put("hotelBookings", itineraryLegRepository.count());
-                summary.put("visaRequests", visaRequirementRepository.count());
-                summary.put("completedItineraries", tripRequestRepository.findAll().stream().filter(t -> t.getStatus() == TripStatus.COMPLETED).count());
-                summary.put("upcomingTravel", approvedTripsTD.size());
-                break;
-
-            case FINANCE:
-                List<ExpenseClaim> allClaimsFin = expenseClaimRepository.findAll();
-                List<AdvanceRequest> allAdvancesFin = advanceRequestRepository.findAll();
-
-                BigDecimal totalSpend = allClaimsFin.stream()
-                        .filter(c -> c.getStatus() == ExpenseStatus.APPROVED || c.getStatus() == ExpenseStatus.PAID)
-                        .map(c -> c.getUsdEquivalent() != null ? c.getUsdEquivalent() : BigDecimal.ZERO)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-                BigDecimal disbursedAdv = allAdvancesFin.stream()
-                        .filter(a -> a.getStatus() == AdvanceStatus.DISBURSED || a.getStatus() == AdvanceStatus.SETTLED)
-                        .map(a -> a.getUsdEquivalent() != null ? a.getUsdEquivalent() : a.getRequestedAmount())
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-                summary.put("pendingReimbursements", allClaimsFin.stream().filter(c -> c.getStatus() == ExpenseStatus.APPROVED).count());
-                summary.put("pendingAdvanceDisbursements", allAdvancesFin.stream().filter(a -> a.getStatus() == AdvanceStatus.APPROVED).count());
-                summary.put("processedPayments", allClaimsFin.stream().filter(c -> c.getStatus() == ExpenseStatus.PAID).count());
-                summary.put("failedPayments", 0);
-                summary.put("totalBudgetAllocated", new BigDecimal("1000000.00"));
-                summary.put("totalDisbursedAdvances", disbursedAdv);
-                summary.put("totalExpenseSpend", totalSpend);
-                break;
-
-            case COMPLIANCE:
-                List<PolicyException> exceptions = policyExceptionRepository.findAll();
-                summary.put("policyExceptions", exceptions.size());
-                summary.put("openExceptions", exceptions.stream().filter(e -> "PENDING".equalsIgnoreCase(e.getApprovalStatus())).count());
-                summary.put("highValueClaims", expenseClaimRepository.findAll().stream().filter(c -> c.getTotalAmount() != null && c.getTotalAmount().compareTo(new BigDecimal("5000")) >= 0).count());
-                summary.put("auditSummaryCount", complianceAuditRepository.count());
-                break;
-
             case ADMIN:
+                return getAdminDashboard();
+            case EMPLOYEE:
+                return getEmployeeDashboard(user);
+            case APPROVING_MANAGER:
+                return getManagerDashboard(user);
+            case FINANCE:
+                return getFinanceDashboard();
+            case TRAVEL_DESK:
+                return getTravelDeskDashboard();
+            case COMPLIANCE:
+                return getComplianceDashboard();
             default:
-                List<User> allUsers = userRepository.findAll();
-                summary.put("users", allUsers.size());
-                summary.put("activeUsers", allUsers.stream().filter(User::isActive).count());
-                summary.put("inactiveUsers", allUsers.stream().filter(u -> !u.isActive()).count());
-                summary.put("departments", 5);
-                summary.put("roles", Role.values().length);
-                summary.put("trips", tripRequestRepository.count());
-                summary.put("expenses", expenseClaimRepository.count());
-                summary.put("policies", travelPolicyRepository.count());
-                summary.put("advances", advanceRequestRepository.count());
-                summary.put("complianceCases", policyExceptionRepository.count());
-                summary.put("activeGrades", gradeRepository.count());
-                break;
+                return getAdminDashboard();
         }
-
-        return ResponseEntity.ok(summary);
     }
 }

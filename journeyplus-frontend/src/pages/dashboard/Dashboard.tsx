@@ -8,6 +8,12 @@ import {
   usePendingUsers,
   useExceptions,
   useDashboardSummary,
+  useAdminDashboard,
+  useEmployeeDashboard,
+  useManagerDashboard,
+  useFinanceDashboard,
+  useTravelDeskDashboard,
+  useComplianceDashboard,
 } from "../../hooks";
 import {
   Plane,
@@ -39,8 +45,15 @@ export const Dashboard: React.FC = () => {
   const isTravelDesk = user?.role === "TRAVEL_DESK";
   const isAdmin = user?.role === "ADMIN";
 
-  const { data: summary, isLoading: summaryLoading } = useDashboardSummary(user?.role);
-  const { data: trips, isLoading: tripsLoading } = useTrips(user?.role || "EMPLOYEE");
+  const { data: summary } = useDashboardSummary(user?.role);
+  const { data: empSummary } = useEmployeeDashboard();
+  const { data: mgrSummary } = useManagerDashboard();
+  const { data: tdSummary } = useTravelDeskDashboard();
+  const { data: finSummary } = useFinanceDashboard();
+  const { data: compSummary } = useComplianceDashboard();
+  const { data: adminSummary } = useAdminDashboard();
+
+  const { data: trips } = useTrips(user?.role || "EMPLOYEE");
   const { data: advances } = useAdvances(user?.role || "EMPLOYEE");
   const { data: claims } = useClaims(user?.role || "EMPLOYEE");
 
@@ -170,9 +183,10 @@ export const Dashboard: React.FC = () => {
 
   // Render Manager Dashboard
   const renderManager = () => {
-    const pendingTrips = summary?.pendingTripApprovals ?? (trips?.filter((t) => t.status === "SUBMITTED").length || 0);
-    const pendingAdvances = summary?.pendingAdvanceRequests ?? (advances?.filter((a) => (a.status as string) === "REQUESTED").length || 0);
-    const pendingClaims = summary?.pendingExpenseApprovals ?? (claims?.filter((c) => c.status === "SUBMITTED").length || 0);
+    const pendingTrips = mgrSummary?.tripsAwaitingApproval ?? summary?.pendingTripApprovals ?? (trips?.filter((t) => t.status === "SUBMITTED").length || 0);
+    const pendingAdvances = mgrSummary?.advanceRequestsAwaitingApproval ?? summary?.pendingAdvanceRequests ?? (advances?.filter((a) => (a.status as string) === "REQUESTED").length || 0);
+    const pendingClaims = mgrSummary?.expenseClaimsAwaitingApproval ?? summary?.pendingExpenseApprovals ?? (claims?.filter((c) => c.status === "SUBMITTED").length || 0);
+    const travellingNow = mgrSummary?.employeesCurrentlyTravelling ?? summary?.employeesCurrentlyTravelling ?? 0;
 
     return (
       <div className="space-y-6 animate-in fade-in-50 duration-200">
@@ -213,7 +227,7 @@ export const Dashboard: React.FC = () => {
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] uppercase font-bold text-muted-foreground">Currently Travelling</span>
-              <p className="text-2xl font-bold text-green-600">{summary?.employeesCurrentlyTravelling ?? 0}</p>
+              <p className="text-2xl font-bold text-green-600">{travellingNow}</p>
             </div>
             <div className="p-2 bg-green-50 dark:bg-green-950/20 rounded-full text-green-600">
               <Briefcase className="h-5 w-5" />
@@ -237,22 +251,22 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Pending Bookings</span>
-            <p className="text-2xl font-bold text-blue-600">{summary?.pendingBookings ?? 0}</p>
+            <p className="text-2xl font-bold text-blue-600">{tdSummary?.pendingBookings ?? summary?.pendingBookings ?? 0}</p>
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Itinerary Legs</span>
-            <p className="text-2xl font-bold">{summary?.flightBookings ?? 0}</p>
+            <p className="text-2xl font-bold">{tdSummary?.flightBookings ?? summary?.flightBookings ?? 0}</p>
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Visa Requests</span>
-            <p className="text-2xl font-bold text-purple-600">{summary?.visaRequests ?? 0}</p>
+            <p className="text-2xl font-bold text-purple-600">{tdSummary?.visaRequests ?? summary?.visaRequests ?? 0}</p>
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Completed Itineraries</span>
-            <p className="text-2xl font-bold text-green-600">{summary?.completedItineraries ?? 0}</p>
+            <p className="text-2xl font-bold text-green-600">{tdSummary?.completedItineraries ?? summary?.completedItineraries ?? 0}</p>
           </div>
         </div>
 
@@ -272,22 +286,22 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Budget Allocated</span>
-            <p className="text-2xl font-bold">{formatCurrency(summary?.totalBudgetAllocated ?? 1000000)}</p>
+            <p className="text-2xl font-bold">{formatCurrency(finSummary?.totalBudgetAllocated ?? summary?.totalBudgetAllocated ?? 1000000)}</p>
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Disbursed Advances</span>
-            <p className="text-2xl font-bold">{formatCurrency(summary?.totalDisbursedAdvances ?? 0)}</p>
+            <p className="text-2xl font-bold">{formatCurrency(finSummary?.totalDisbursedAdvances ?? summary?.totalDisbursedAdvances ?? 0)}</p>
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Pending Disbursements</span>
-            <p className="text-2xl font-bold text-blue-600">{summary?.pendingAdvanceDisbursements ?? 0}</p>
+            <p className="text-2xl font-bold text-blue-600">{finSummary?.pendingDisbursements ?? summary?.pendingAdvanceDisbursements ?? 0}</p>
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Pending Reimbursements</span>
-            <p className="text-2xl font-bold text-yellow-600">{summary?.pendingReimbursements ?? 0}</p>
+            <p className="text-2xl font-bold text-yellow-600">{finSummary?.pendingReimbursements ?? summary?.pendingReimbursements ?? 0}</p>
           </div>
         </div>
 
@@ -313,7 +327,7 @@ export const Dashboard: React.FC = () => {
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] uppercase font-bold text-muted-foreground">Open Policy Exceptions</span>
-              <p className="text-2xl font-bold text-destructive">{summary?.openExceptions ?? (exceptions?.length || 0)}</p>
+              <p className="text-2xl font-bold text-destructive">{compSummary?.openExceptions ?? summary?.openExceptions ?? (exceptions?.length || 0)}</p>
             </div>
             <div className="p-2 bg-destructive/10 rounded-full text-destructive">
               <AlertTriangle className="h-5 w-5" />
@@ -323,7 +337,7 @@ export const Dashboard: React.FC = () => {
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] uppercase font-bold text-muted-foreground">High Value Claims</span>
-              <p className="text-2xl font-bold text-purple-600">{summary?.highValueClaims ?? 0}</p>
+              <p className="text-2xl font-bold text-purple-600">{compSummary?.highValueClaims ?? summary?.highValueClaims ?? 0}</p>
             </div>
             <div className="p-2 bg-purple-50 dark:bg-purple-950/20 rounded-full text-purple-600">
               <Coins className="h-5 w-5" />
@@ -333,7 +347,7 @@ export const Dashboard: React.FC = () => {
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm flex items-center justify-between">
             <div className="space-y-1">
               <span className="text-[10px] uppercase font-bold text-muted-foreground">Compliance Audits</span>
-              <p className="text-2xl font-bold text-green-600">{summary?.auditSummaryCount ?? 0}</p>
+              <p className="text-2xl font-bold text-green-600">{compSummary?.auditSummaryCount ?? summary?.auditSummaryCount ?? 0}</p>
             </div>
             <div className="p-2 bg-green-50 dark:bg-green-950/20 rounded-full text-green-600">
               <FolderLock className="h-5 w-5" />
@@ -358,28 +372,30 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Users</span>
-            <p className="text-2xl font-bold text-primary">{summary?.users ?? 0} ({summary?.activeUsers ?? 0} active)</p>
-          </div>
-
-          <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
-            <span className="text-[10px] uppercase font-bold text-muted-foreground">Active Grades</span>
-            <p className="text-2xl font-bold">{summary?.activeGrades ?? 4}</p>
+            <p className="text-2xl font-bold text-primary">
+              {adminSummary?.totalUsers ?? summary?.users ?? 0} ({adminSummary?.activeUsers ?? summary?.activeUsers ?? 0} active)
+            </p>
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Active Travel Policies</span>
-            <p className="text-2xl font-bold">{summary?.policies ?? 0}</p>
+            <p className="text-2xl font-bold">{adminSummary?.totalPolicies ?? summary?.policies ?? 0}</p>
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Total System Trips</span>
-            <p className="text-2xl font-bold">{summary?.trips ?? 0}</p>
+            <p className="text-2xl font-bold">{adminSummary?.totalTrips ?? summary?.trips ?? 0}</p>
+          </div>
+
+          <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
+            <span className="text-[10px] uppercase font-bold text-muted-foreground">Total Expense Claims</span>
+            <p className="text-2xl font-bold">{adminSummary?.totalExpenseClaims ?? summary?.expenses ?? 0}</p>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-4">
           <Button onClick={() => navigate("/admin/users")} className="gap-2">
-            <UserCheck className="h-4 w-4" /> Manage Users ({pendingUsers?.length || 0} pending)
+            <UserCheck className="h-4 w-4" /> Manage Users ({adminSummary?.pendingUserApprovals ?? pendingUsers?.length ?? 0} pending)
           </Button>
           <Button onClick={() => navigate("/admin/policies")} variant="outline">
             Configure Entitlements

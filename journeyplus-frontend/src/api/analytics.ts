@@ -86,6 +86,36 @@ export const getDashboardSummary = async (role?: string): Promise<DashboardSumma
   return response.data;
 };
 
+export const getAdminDashboard = async (): Promise<any> => {
+  const response = await api.get("/api/dashboard/admin");
+  return response.data;
+};
+
+export const getEmployeeDashboard = async (): Promise<any> => {
+  const response = await api.get("/api/dashboard/employee");
+  return response.data;
+};
+
+export const getManagerDashboard = async (): Promise<any> => {
+  const response = await api.get("/api/dashboard/manager");
+  return response.data;
+};
+
+export const getFinanceDashboard = async (): Promise<any> => {
+  const response = await api.get("/api/dashboard/finance");
+  return response.data;
+};
+
+export const getTravelDeskDashboard = async (): Promise<any> => {
+  const response = await api.get("/api/dashboard/traveldesk");
+  return response.data;
+};
+
+export const getComplianceDashboard = async (): Promise<any> => {
+  const response = await api.get("/api/dashboard/compliance");
+  return response.data;
+};
+
 export const getAnalyticsSummary = async (): Promise<AnalyticsSummaryResponse> => {
   const response = await api.get<AnalyticsSummaryResponse>("/api/analytics/summary");
   return response.data;
