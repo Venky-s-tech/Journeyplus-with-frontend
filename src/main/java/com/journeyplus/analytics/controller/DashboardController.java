@@ -21,7 +21,9 @@ import com.journeyplus.trip.repository.TripRequestRepository;
 import com.journeyplus.trip.repository.VisaRequirementRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -69,6 +71,22 @@ public class DashboardController {
         this.complianceAuditRepository = complianceAuditRepository;
     }
 
+    private User getCurrentUser(User principal) {
+        if (principal != null) {
+            return principal;
+        }
+        try {
+            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getPrincipal() instanceof User) {
+                return (User) auth.getPrincipal();
+            }
+            if (auth != null && auth.getName() != null) {
+                return userRepository.findByUsername(auth.getName()).orElse(null);
+            }
+        } catch (Exception ignored) {}
+        return null;
+    }
+
     @GetMapping("/admin")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> getAdminDashboard() {
@@ -85,7 +103,7 @@ public class DashboardController {
         summary.put("totalUsers", allUsers.size());
         summary.put("activeUsers", allUsers.stream().filter(User::isActive).count());
         summary.put("inactiveUsers", allUsers.stream().filter(u -> !u.isActive()).count());
-        summary.put("pendingUserApprovals", allUsers.stream().filter(u -> "PENDING".equalsIgnoreCase(u.getApprovalStatus())).count());
+        summary.put("pendingUserApprovals", allUsers.stream().filter(u -> u.getApprovalStatus() != null && "PENDING".equalsIgnoreCase(u.getApprovalStatus())).count());
 
         summary.put("totalTrips", allTrips.size());
         summary.put("draftTrips", allTrips.stream().filter(t -> t.getStatus() == TripStatus.DRAFT).count());
@@ -118,15 +136,16 @@ public class DashboardController {
 
     @GetMapping("/employee")
     public ResponseEntity<Map<String, Object>> getEmployeeDashboard(@AuthenticationPrincipal User user) {
-        Long userId = user != null ? user.getId() : 1L;
+        User currentUser = getCurrentUser(user);
+        Long userId = currentUser != null ? currentUser.getId() : 1L;
 
-        List<TripRequest> myTrips = tripRequestRepository.findByEmployee_Id(userId);
-        List<ExpenseClaim> myClaims = expenseClaimRepository.findByEmployee_Id(userId);
-        List<AdvanceRequest> myAdvances = advanceRequestRepository.findByEmployee_Id(userId);
+        List<TripRequest> myTrips = userId != null ? tripRequestRepository.findByEmployee_Id(userId) : List.of();
+        List<ExpenseClaim> myClaims = userId != null ? expenseClaimRepository.findByEmployee_Id(userId) : List.of();
+        List<AdvanceRequest> myAdvances = userId != null ? advanceRequestRepository.findByEmployee_Id(userId) : List.of();
 
         BigDecimal activeAdvSum = myAdvances.stream()
                 .filter(a -> a.getStatus() == AdvanceStatus.DISBURSED)
-                .map(a -> a.getUsdEquivalent() != null ? a.getUsdEquivalent() : a.getRequestedAmount())
+                .map(a -> a.getUsdEquivalent() != null ? a.getUsdEquivalent() : (a.getRequestedAmount() != null ? a.getRequestedAmount() : BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Object> summary = new HashMap<>();
@@ -153,14 +172,15 @@ public class DashboardController {
 
     @GetMapping("/manager")
     public ResponseEntity<Map<String, Object>> getManagerDashboard(@AuthenticationPrincipal User user) {
-        Long managerId = user != null ? user.getId() : 1L;
-        List<TripRequest> managerTrips = tripRequestRepository.findByApprover_Id(managerId);
+        User currentUser = getCurrentUser(user);
+        Long managerId = currentUser != null ? currentUser.getId() : 1L;
+        List<TripRequest> managerTrips = managerId != null ? tripRequestRepository.findByApprover_Id(managerId) : List.of();
         List<ExpenseClaim> allClaims = expenseClaimRepository.findAll();
         List<AdvanceRequest> allAdvances = advanceRequestRepository.findAll();
 
         BigDecimal teamExpenseAmt = allClaims.stream()
                 .filter(c -> c.getStatus() == ExpenseStatus.APPROVED || c.getStatus() == ExpenseStatus.PAID)
-                .map(c -> c.getUsdEquivalent() != null ? c.getUsdEquivalent() : BigDecimal.ZERO)
+                .map(c -> c.getUsdEquivalent() != null ? c.getUsdEquivalent() : (c.getTotalAmount() != null ? c.getTotalAmount() : BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Object> summary = new HashMap<>();
@@ -182,12 +202,12 @@ public class DashboardController {
 
         BigDecimal monthlyReimbursementAmt = allClaims.stream()
                 .filter(c -> c.getStatus() == ExpenseStatus.PAID)
-                .map(c -> c.getUsdEquivalent() != null ? c.getUsdEquivalent() : BigDecimal.ZERO)
+                .map(c -> c.getUsdEquivalent() != null ? c.getUsdEquivalent() : (c.getTotalAmount() != null ? c.getTotalAmount() : BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal monthlyAdvAmt = allAdvances.stream()
                 .filter(a -> a.getStatus() == AdvanceStatus.DISBURSED || a.getStatus() == AdvanceStatus.SETTLED)
-                .map(a -> a.getUsdEquivalent() != null ? a.getUsdEquivalent() : a.getRequestedAmount())
+                .map(a -> a.getUsdEquivalent() != null ? a.getUsdEquivalent() : (a.getRequestedAmount() != null ? a.getRequestedAmount() : BigDecimal.ZERO))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         Map<String, Object> summary = new HashMap<>();
@@ -226,7 +246,7 @@ public class DashboardController {
 
         Map<String, Object> summary = new HashMap<>();
         summary.put("openExceptions", exceptions.stream().filter(e -> "PENDING".equalsIgnoreCase(e.getApprovalStatus())).count());
-        summary.put("closedExceptions", exceptions.stream().filter(e -> !"PENDING".equalsIgnoreCase(e.getApprovalStatus())).count());
+        summary.put("closedExceptions", exceptions.stream().filter(e -> e.getApprovalStatus() != null && !"PENDING".equalsIgnoreCase(e.getApprovalStatus())).count());
         summary.put("escalatedExceptions", exceptions.stream().filter(e -> "REJECTED".equalsIgnoreCase(e.getApprovalStatus())).count());
         summary.put("policyViolations", exceptions.size());
         summary.put("highValueClaims", expenseClaimRepository.findAll().stream().filter(c -> c.getTotalAmount() != null && c.getTotalAmount().compareTo(new BigDecimal("5000")) >= 0).count());
@@ -241,14 +261,15 @@ public class DashboardController {
             @RequestParam(required = false) Long userId,
             @AuthenticationPrincipal User user) {
 
-        Role effectiveRole = role != null ? role : user.getRole();
+        User currentUser = getCurrentUser(user);
+        Role effectiveRole = role != null ? role : (currentUser != null ? currentUser.getRole() : Role.ADMIN);
         switch (effectiveRole) {
             case ADMIN:
                 return getAdminDashboard();
             case EMPLOYEE:
-                return getEmployeeDashboard(user);
+                return getEmployeeDashboard(currentUser);
             case APPROVING_MANAGER:
-                return getManagerDashboard(user);
+                return getManagerDashboard(currentUser);
             case FINANCE:
                 return getFinanceDashboard();
             case TRAVEL_DESK:
