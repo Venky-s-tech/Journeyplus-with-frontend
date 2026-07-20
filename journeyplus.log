@@ -379,3 +379,11 @@
 2026-07-20T22:07:44.102+05:30  WARN 20492 --- [journeyplus-backend] [http-nio-8091-exec-1] c.j.n.controller.NotificationController  : Failed to fully map User object: could not initialize proxy [com.journeyplus.iam.entity.User#4] - no Session
 2026-07-20T22:07:44.102+05:30  WARN 20492 --- [journeyplus-backend] [http-nio-8091-exec-1] c.j.n.controller.NotificationController  : Failed to fully map User object: could not initialize proxy [com.journeyplus.iam.entity.User#4] - no Session
 2026-07-20T22:07:44.102+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-1] c.j.n.controller.NotificationController  : Returning 3 notifications for user=venky_manager
+2026-07-20T22:12:54.639+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-7] c.journeyplus.iam.service.AuthService    : Authentication attempt for username: venky_traveldesk
+2026-07-20T22:12:55.155+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-7] c.journeyplus.iam.service.AuthService    : User 'venky_traveldesk' successfully logged in. Role: TRAVEL_DESK
+2026-07-20T22:12:55.249+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-9] c.journeyplus.iam.service.UserService    : Fetching user by ID: 5
+2026-07-20T22:12:55.427+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-7] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T22:12:57.562+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-2] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T22:12:58.921+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-7] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T22:13:01.701+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-7] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T22:13:02.876+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-10] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
