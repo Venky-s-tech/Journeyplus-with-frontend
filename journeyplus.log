@@ -510,3 +510,13 @@
 2026-07-20T22:50:30.194+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-10] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
 2026-07-20T22:52:44.740+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-1] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
 2026-07-20T22:53:22.587+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-6] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:07:47.788+05:30  WARN 20492 --- [journeyplus-backend] [http-nio-8091-exec-2] c.j.config.JwtAuthenticationFilter       : JWT token parsing failed for request [/api/notifications]: JWT expired 168761 milliseconds ago at 2026-07-20T17:34:59.000Z. Current time: 2026-07-20T17:37:47.761Z. Allowed clock skew: 0 milliseconds.
+2026-07-20T23:10:53.337+05:30  WARN 20492 --- [journeyplus-backend] [http-nio-8091-exec-10] c.j.config.JwtAuthenticationFilter       : JWT token parsing failed for request [/api/notifications]: JWT expired 354337 milliseconds ago at 2026-07-20T17:34:59.000Z. Current time: 2026-07-20T17:40:53.337Z. Allowed clock skew: 0 milliseconds.
+2026-07-20T23:10:55.403+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-7] c.journeyplus.iam.service.AuthService    : Token refresh attempt started
+2026-07-20T23:10:55.404+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-3] c.journeyplus.iam.service.AuthService    : Token refresh attempt started
+2026-07-20T23:10:55.532+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-7] c.journeyplus.iam.service.AuthService    : Token refresh successful for user 'venky_traveldesk'
+2026-07-20T23:10:55.531+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-3] c.journeyplus.iam.service.AuthService    : Token refresh successful for user 'venky_traveldesk'
+2026-07-20T23:10:55.580+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-2] c.journeyplus.iam.service.UserService    : Fetching user by ID: 5
+2026-07-20T23:10:55.654+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-8] c.journeyplus.iam.service.UserService    : Fetching user by ID: 5
+2026-07-20T23:10:55.766+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-5] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk
+2026-07-20T23:11:10.845+05:30  INFO 20492 --- [journeyplus-backend] [http-nio-8091-exec-5] c.j.n.controller.NotificationController  : Returning 0 notifications for user=venky_traveldesk

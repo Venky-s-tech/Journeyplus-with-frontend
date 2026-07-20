@@ -414,6 +414,103 @@ public class TripRequestController {
         return ResponseEntity.ok(out);
     }
 
+    @PostMapping("/{tripId}/itinerary")
+    public ResponseEntity<ItineraryLegResponse> addItineraryLeg(
+            @PathVariable Long tripId,
+            @RequestBody java.util.Map<String, Object> body) {
+        TripRequest trip = tripService.getTripRequest(tripId);
+        ItineraryLeg leg = new ItineraryLeg();
+        leg.setTripRequest(trip);
+        leg.setOrigin(body.get("origin") != null ? body.get("origin").toString() : (body.get("departureCity") != null ? body.get("departureCity").toString() : "Origin"));
+        leg.setDestination(body.get("destination") != null ? body.get("destination").toString() : (body.get("arrivalCity") != null ? body.get("arrivalCity").toString() : trip.getDestination()));
+        
+        String legTypeStr = body.get("legType") != null ? body.get("legType").toString() : (body.get("travelMode") != null ? body.get("travelMode").toString() : "FLIGHT");
+        try {
+            leg.setLegType(com.journeyplus.trip.entity.LegType.valueOf(legTypeStr.toUpperCase()));
+        } catch (Exception e) {
+            leg.setLegType(com.journeyplus.trip.entity.LegType.FLIGHT);
+        }
+
+        if (body.get("travelDate") != null) {
+            leg.setTravelDate(java.time.LocalDate.parse(body.get("travelDate").toString()));
+        } else {
+            leg.setTravelDate(trip.getDepartureDate() != null ? trip.getDepartureDate() : java.time.LocalDate.now());
+        }
+
+        BigDecimal costVal = BigDecimal.ZERO;
+        if (body.get("cost") != null) costVal = new BigDecimal(body.get("cost").toString());
+        else if (body.get("estimatedCost") != null) costVal = new BigDecimal(body.get("estimatedCost").toString());
+        leg.setCost(costVal.compareTo(BigDecimal.ZERO) > 0 ? costVal : new BigDecimal("100.00"));
+        leg.setOriginalCurrency(body.get("originalCurrency") != null ? body.get("originalCurrency").toString() : "USD");
+        leg.setUsdEquivalent(leg.getCost());
+
+        if (body.get("carrierDetails") != null) leg.setCarrierDetails(body.get("carrierDetails").toString());
+        if (body.get("bookingRef") != null) leg.setBookingRef(body.get("bookingRef").toString());
+        if (body.get("bookingReference") != null) leg.setBookingRef(body.get("bookingReference").toString());
+        leg.setStatus(com.journeyplus.trip.entity.ItineraryStatus.CONFIRMED);
+
+        ItineraryLeg saved = itineraryLegRepository.save(leg);
+        return ResponseEntity.ok(toLegResponse(saved));
+    }
+
+    @GetMapping({"/{tripId}/itinerary", "/{tripId}/legs"})
+    public ResponseEntity<List<ItineraryLegResponse>> getItineraryLegs(@PathVariable Long tripId) {
+        List<ItineraryLeg> legs = itineraryLegRepository.findByTripRequest_Id(tripId);
+        List<ItineraryLegResponse> out = legs.stream().map(this::toLegResponse).collect(Collectors.toList());
+        return ResponseEntity.ok(out);
+    }
+
+    @PostMapping("/{tripId}/legs/{legId}/book")
+    public ResponseEntity<ItineraryLegResponse> bookItineraryLeg(
+            @PathVariable Long tripId,
+            @PathVariable Long legId,
+            @RequestBody java.util.Map<String, String> body) {
+        ItineraryLeg leg = itineraryLegRepository.findById(legId)
+                .orElseThrow(() -> new IllegalArgumentException("Itinerary leg not found: " + legId));
+
+        if (body.get("bookingReference") != null) leg.setBookingRef(body.get("bookingReference"));
+        if (body.get("bookingRef") != null) leg.setBookingRef(body.get("bookingRef"));
+        if (body.get("carrierDetails") != null) leg.setCarrierDetails(body.get("carrierDetails"));
+        if (body.get("bookingStatus") != null) {
+            try { leg.setStatus(com.journeyplus.trip.entity.ItineraryStatus.valueOf(body.get("bookingStatus").toUpperCase())); } catch (Exception ignored) {}
+        } else {
+            leg.setStatus(com.journeyplus.trip.entity.ItineraryStatus.CONFIRMED);
+        }
+
+        ItineraryLeg saved = itineraryLegRepository.save(leg);
+        return ResponseEntity.ok(toLegResponse(saved));
+    }
+
+    @PostMapping("/{tripId}/visa")
+    public ResponseEntity<VisaRequirementResponse> addVisaRequirement(
+            @PathVariable Long tripId,
+            @RequestBody java.util.Map<String, Object> body) {
+        TripRequest trip = tripService.getTripRequest(tripId);
+        VisaRequirement visa = new VisaRequirement();
+        visa.setTripRequest(trip);
+        visa.setCountry(body.get("country") != null ? body.get("country").toString() : trip.getDestination());
+        visa.setVisaType(body.get("visaType") != null ? body.get("visaType").toString() : "BUSINESS");
+        visa.setRequiresVisa(true);
+
+        if (body.get("status") != null) {
+            try { visa.setStatus(com.journeyplus.trip.dto.VisaStatus.valueOf(body.get("status").toString().toUpperCase())); } catch (Exception e) { visa.setStatus(com.journeyplus.trip.dto.VisaStatus.GRANTED); }
+        } else {
+            visa.setStatus(com.journeyplus.trip.dto.VisaStatus.GRANTED);
+        }
+
+        if (body.get("notes") != null) visa.setNotes(body.get("notes").toString());
+
+        VisaRequirement saved = visaRequirementRepository.save(visa);
+        return ResponseEntity.ok(toVisaResponse(saved));
+    }
+
+    @GetMapping({"/{tripId}/visa", "/{tripId}/visas"})
+    public ResponseEntity<List<VisaRequirementResponse>> getVisaRequirements(@PathVariable Long tripId) {
+        List<VisaRequirement> visas = visaRequirementRepository.findByTripRequest_Id(tripId);
+        List<VisaRequirementResponse> out = visas.stream().map(this::toVisaResponse).collect(Collectors.toList());
+        return ResponseEntity.ok(out);
+    }
+
     private VisaRequirementResponse toVisaResponse(VisaRequirement v) {
         if (v == null) return null;
         VisaRequirementResponse r = new VisaRequirementResponse();
