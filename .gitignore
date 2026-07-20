@@ -1,6 +1,7 @@
 src/main/resources/keys/
 target/
 *.log
+*.gz
 aes_key.txt
 journeyplus-frontend/node_modules/
 journeyplus-frontend/dist/

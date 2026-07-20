@@ -1,5 +1,11 @@
 import React from "react";
-import { useTopTravellers } from "../../hooks";
+import {
+  useTopTravellers,
+  useAnalyticsSummary,
+  useSpendByDepartment,
+  useSpendByCategory,
+  useMonthlyTrends,
+} from "../../hooks";
 import {
   ResponsiveContainer,
   BarChart,
@@ -21,37 +27,21 @@ import { TrendingUp, Award, Coins } from "lucide-react";
 
 export const Analytics: React.FC = () => {
   const { data: topTravellers, isLoading } = useTopTravellers();
+  const { data: summaryData } = useAnalyticsSummary();
+  const { data: deptDataRaw } = useSpendByDepartment();
+  const { data: categoryDataRaw } = useSpendByCategory();
+  const { data: trendDataRaw } = useMonthlyTrends();
 
   // Premium HSL-tailored colors for chart cells
   const COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444"];
 
-  // Mock department spend distribution
-  const deptData = [
-    { name: "Engineering", amount: 62000 },
-    { name: "Sales", amount: 98000 },
-    { name: "Marketing", amount: 24000 },
-    { name: "Finance", amount: 15000 },
-    { name: "HR", amount: 8000 },
-  ];
+  const deptData = deptDataRaw || [];
+  const categoryData = categoryDataRaw || [];
+  const trendData = trendDataRaw || [];
 
-  // Category distribution
-  const categoryData = [
-    { name: "Meals", value: 34000 },
-    { name: "Accommodation", value: 120000 },
-    { name: "Transport", value: 45000 },
-    { name: "Visa", value: 11000 },
-    { name: "Misc", value: 6000 },
-  ];
-
-  // Monthly trends
-  const trendData = [
-    { month: "Jan", amount: 12000 },
-    { month: "Feb", amount: 19000 },
-    { month: "Mar", amount: 32000 },
-    { month: "Apr", amount: 24000 },
-    { month: "May", amount: 48000 },
-    { month: "Jun", amount: 55000 },
-  ];
+  const budgetPct = summaryData?.budgetUtilisationPct ?? 0;
+  const settlementPct = summaryData?.advanceSettlementRatePct ?? 0;
+  const exceptionPct = summaryData?.policyExceptionRatePct ?? 0;
 
   const columns = [
     {
@@ -60,15 +50,15 @@ export const Analytics: React.FC = () => {
     },
     {
       header: "Traveller Name",
-      accessor: (t: any) => <span>{t.user?.name || t.user?.username || "Test Traveller"}</span>,
+      accessor: (t: any) => <span>{t.employeeName || t.name || t.user?.name || "Corporate Traveller"}</span>,
+    },
+    {
+      header: "Department",
+      accessor: (t: any) => <span className="text-xs uppercase font-medium">{t.departmentId || "GENERAL"}</span>,
     },
     {
       header: "Total Cost Incurred",
-      accessor: (t: any) => <span className="font-semibold text-primary">{formatCurrency(t.totalCost || 0)}</span>,
-    },
-    {
-      header: "Grade",
-      accessor: (t: any) => <span className="text-xs uppercase font-medium">{t.user?.gradeId || "G2"}</span>,
+      accessor: (t: any) => <span className="font-semibold text-primary">{formatCurrency(t.totalSpend || t.totalCost || 0)}</span>,
     },
   ];
 
@@ -85,25 +75,25 @@ export const Analytics: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="p-4 bg-card border border-border rounded-lg shadow-sm">
           <span className="text-[10px] uppercase font-bold text-muted-foreground">Budget Utilisation Rate</span>
-          <p className="text-2xl font-bold">78.2%</p>
+          <p className="text-2xl font-bold">{budgetPct}%</p>
           <div className="w-full bg-muted h-2 rounded-full mt-2 overflow-hidden">
-            <div className="bg-blue-600 h-full w-[78%]" />
+            <div className="bg-blue-600 h-full" style={{ width: `${Math.min(100, budgetPct)}%` }} />
           </div>
         </div>
 
         <div className="p-4 bg-card border border-border rounded-lg shadow-sm">
           <span className="text-[10px] uppercase font-bold text-muted-foreground">Advance Settlement Rate</span>
-          <p className="text-2xl font-bold">92.4%</p>
+          <p className="text-2xl font-bold">{settlementPct}%</p>
           <div className="w-full bg-muted h-2 rounded-full mt-2 overflow-hidden">
-            <div className="bg-green-600 h-full w-[92%]" />
+            <div className="bg-green-600 h-full" style={{ width: `${Math.min(100, settlementPct)}%` }} />
           </div>
         </div>
 
         <div className="p-4 bg-card border border-border rounded-lg shadow-sm">
-          <span className="text-[10px] uppercase font-bold text-muted-foreground">Policy Compliance Exception Rate</span>
-          <p className="text-2xl font-bold text-destructive">4.1%</p>
+          <span className="text-[10px] uppercase font-bold text-muted-foreground">Policy Exception Rate</span>
+          <p className="text-2xl font-bold text-destructive">{exceptionPct}%</p>
           <div className="w-full bg-muted h-2 rounded-full mt-2 overflow-hidden">
-            <div className="bg-destructive h-full w-[4%]" />
+            <div className="bg-destructive h-full" style={{ width: `${Math.min(100, exceptionPct)}%` }} />
           </div>
         </div>
       </div>

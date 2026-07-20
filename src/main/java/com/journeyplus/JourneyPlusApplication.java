@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @SpringBootApplication
 @EnableTransactionManagement
 @EnableAspectJAutoProxy
-public class JourneyPlusApplication {
+public class    JourneyPlusApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(JourneyPlusApplication.class, args);
