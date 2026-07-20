@@ -18,17 +18,19 @@ import io.swagger.v3.oas.annotations.Operation;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/expenses")
+@RequestMapping({"/api/expenses", "/api/claims"})
 public class ExpenseController {
 
     private final ExpenseService expenseService;
     private final TripService tripService;
     private final UserRepository userRepository;
+    private final com.journeyplus.expense.repository.ExpenseLineRepository expenseLineRepository;
 
-    public ExpenseController(ExpenseService expenseService, TripService tripService, UserRepository userRepository) {
+    public ExpenseController(ExpenseService expenseService, TripService tripService, UserRepository userRepository, com.journeyplus.expense.repository.ExpenseLineRepository expenseLineRepository) {
         this.expenseService = expenseService;
         this.tripService = tripService;
         this.userRepository = userRepository;
+        this.expenseLineRepository = expenseLineRepository;
     }
 
     @PostMapping
@@ -114,6 +116,39 @@ public class ExpenseController {
             @RequestParam(required = false) String comments,
             @AuthenticationPrincipal User manager) {
         return ResponseEntity.ok(expenseService.approveOrRejectExpenseClaim(claimId, ExpenseStatus.REJECTED, comments, manager));
+    }
+
+    @PatchMapping("/{claimId}/status")
+    public ResponseEntity<ExpenseClaim> updateClaimStatusPatch(
+            @PathVariable Long claimId,
+            @RequestBody java.util.Map<String, String> body,
+            @AuthenticationPrincipal User user) {
+        String statusStr = body.get("status");
+        String remarks = body.get("remarks");
+        if (statusStr == null || statusStr.isBlank()) throw new IllegalArgumentException("Status is required");
+        ExpenseStatus status = ExpenseStatus.valueOf(statusStr.toUpperCase());
+        if (status == ExpenseStatus.SUBMITTED) {
+            return ResponseEntity.ok(expenseService.submitExpenseClaim(claimId));
+        } else if (status == ExpenseStatus.APPROVED || status == ExpenseStatus.REJECTED) {
+            return ResponseEntity.ok(expenseService.approveOrRejectExpenseClaim(claimId, status, remarks, user));
+        }
+        return ResponseEntity.ok(expenseService.getExpenseClaim(claimId));
+    }
+
+    @PatchMapping("/{claimId}/lines/{lineId}/status")
+    public ResponseEntity<com.journeyplus.expense.entity.ExpenseLine> updateLineStatusPatch(
+            @PathVariable Long claimId,
+            @PathVariable Long lineId,
+            @RequestBody java.util.Map<String, String> body) {
+        String statusStr = body.get("status");
+        if (statusStr != null && !statusStr.isBlank()) {
+            com.journeyplus.expense.entity.ExpenseLineStatus status = com.journeyplus.expense.entity.ExpenseLineStatus.valueOf(statusStr.toUpperCase());
+            com.journeyplus.expense.entity.ExpenseLine line = expenseLineRepository.findById(lineId)
+                    .orElseThrow(() -> new IllegalArgumentException("Expense line not found: " + lineId));
+            line.setStatus(status);
+            return ResponseEntity.ok(expenseLineRepository.save(line));
+        }
+        return ResponseEntity.ok(expenseService.submitExpenseLine(claimId, lineId));
     }
 
     @PostMapping("/{claimId}/reimburse")

@@ -18,6 +18,7 @@ export interface User {
   active: boolean;
   status?: string;
   approvalStatus?: string;
+  permissions?: string[];
 }
 
 export interface UserRegistration {

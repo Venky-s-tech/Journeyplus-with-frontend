@@ -73,6 +73,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    try {
+      api.post("/api/auth/logout").catch(() => {});
+    } catch (e) {
+      // ignore network error on logout
+    }
     setAccessToken(null);
     setAccessTokenState(null);
     setUser(null);

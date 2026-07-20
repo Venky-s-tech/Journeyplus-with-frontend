@@ -89,6 +89,27 @@ public class ComplianceController {
         return ResponseEntity.ok(e);
     }
 
+    @PatchMapping("/exceptions/{id}/status")
+    @PreAuthorize("hasAnyRole('COMPLIANCE','APPROVING_MANAGER','ADMIN')")
+    public ResponseEntity<PolicyException> patchExceptionStatus(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, String> body) {
+        String status = body.get("status");
+        String remarks = body.get("remarks");
+        String action = "APPROVE".equalsIgnoreCase(status) ? "APPROVE" : "REJECT";
+        return resolveException(id, action, remarks);
+    }
+
+    @GetMapping("/claims/high-value")
+    @PreAuthorize("hasAnyRole('COMPLIANCE','FINANCE','ADMIN')")
+    public ResponseEntity<List<ExpenseClaim>> getHighValueClaims(
+            @RequestParam(defaultValue = "5000") java.math.BigDecimal threshold) {
+        List<ExpenseClaim> claims = expenseClaimRepository.findAll().stream()
+                .filter(c -> c.getTotalAmount() != null && c.getTotalAmount().compareTo(threshold) >= 0)
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(claims);
+    }
+
     @PostMapping("/claims/{claimId}/audit")
     @PreAuthorize("hasRole('COMPLIANCE')")
     @AuditAction(module = "COMPLIANCE", action = "CREATE_CLAIM_AUDIT")

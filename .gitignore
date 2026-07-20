@@ -1,1 +1,8 @@
 src/main/resources/keys/
+target/
+*.log
+aes_key.txt
+journeyplus-frontend/node_modules/
+journeyplus-frontend/dist/
+.env
+.DS_Store

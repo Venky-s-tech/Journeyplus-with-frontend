@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -195,6 +196,47 @@ public class TripRequestController {
         List<TripRequest> trips = tripService.getPendingApprovalsForManager(manager.getId());
         List<TripResponse> dto = trips.stream().map(this::toTripResponse).collect(Collectors.toList());
         return ResponseEntity.ok(dto);
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<TripResponse> updateStatusPatch(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, String> body,
+            @AuthenticationPrincipal User user) {
+        String statusStr = body.get("status");
+        String remarks = body.get("remarks");
+        if (statusStr == null || statusStr.isBlank()) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        TripStatus newStatus = TripStatus.valueOf(statusStr.toUpperCase());
+        TripRequest saved;
+        if (newStatus == TripStatus.SUBMITTED) {
+            saved = tripService.submitTripRequest(id);
+        } else if (newStatus == TripStatus.APPROVED || newStatus == TripStatus.REJECTED) {
+            saved = tripService.approveOrRejectTripRequest(id, newStatus, remarks, user);
+        } else {
+            saved = tripService.completeOrCancelTripRequest(id, newStatus);
+        }
+        return ResponseEntity.ok(toTripResponse(saved));
+    }
+
+    @GetMapping("/{id}/full")
+    public ResponseEntity<java.util.Map<String, Object>> getFullTripContext(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User user) {
+        TripRequest trip = tripService.getTripRequest(id);
+        TripResponse response = toTripResponse(trip);
+        
+        List<ItineraryLeg> legs = itineraryLegRepository.findByTripRequest_Id(id);
+        List<VisaRequirement> visas = visaRequirementRepository.findByTripRequest_Id(id);
+        
+        java.util.Map<String, Object> fullContext = new java.util.HashMap<>();
+        fullContext.put("trip", response);
+        fullContext.put("itineraryLegs", legs);
+        fullContext.put("visas", visas);
+        fullContext.put("employeeTripHistoryCount", tripService.getTripsByEmployee(trip.getEmployee().getId()).size());
+        
+        return ResponseEntity.ok(fullContext);
     }
 
     @GetMapping("/{id}")

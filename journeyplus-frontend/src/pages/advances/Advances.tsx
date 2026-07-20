@@ -322,7 +322,7 @@ export const Advances: React.FC = () => {
                 <div className="pt-2 border-t mt-2">
                   <span className="font-semibold block mb-1">Settlement History</span>
                   <div className="space-y-1">
-                    {summary.settlementDetails.map((s) => (
+                    {summary.settlementDetails.map((s: any) => (
                       <div key={s.id} className="p-2 border rounded bg-muted/20 text-[10px] text-muted-foreground">
                         Utilised: {formatCurrency(s.amountUtilised)} | Returned: {formatCurrency(s.amountReturned)}
                         {s.settlementDate ? ` on ${formatDate(s.settlementDate)}` : ""}

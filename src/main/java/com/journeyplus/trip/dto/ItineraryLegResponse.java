@@ -45,6 +45,27 @@ public class ItineraryLegResponse {
     public void setUsdEquivalent(BigDecimal usdEquivalent) { this.usdEquivalent = usdEquivalent; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public void setStatus(com.journeyplus.trip.entity.ItineraryStatus status) { this.status = status != null ? status.name() : null; }
+
+    public ItineraryLegResponse() {}
+
+    public ItineraryLegResponse(com.journeyplus.trip.entity.ItineraryLeg leg) {
+        if (leg != null) {
+            this.id = leg.getId();
+            this.origin = leg.getOrigin();
+            this.destination = leg.getDestination();
+            this.legType = leg.getLegType() != null ? leg.getLegType().name() : null;
+            this.travelDate = leg.getTravelDate();
+            this.departureDateTime = leg.getDepartureDateTime();
+            this.arrivalDateTime = leg.getArrivalDateTime();
+            this.carrierDetails = leg.getCarrierDetails();
+            this.bookingRef = leg.getBookingRef();
+            this.cost = leg.getCost();
+            this.originalCurrency = leg.getOriginalCurrency();
+            this.usdEquivalent = leg.getUsdEquivalent();
+            this.status = leg.getStatus() != null ? leg.getStatus().name() : null;
+        }
+    }
 
 
 }

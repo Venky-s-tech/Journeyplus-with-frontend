@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/audit")
+@RequestMapping({"/api/audit", "/api/audit-logs"})
 public class AuditController {
 
     private final AuditService auditService;
@@ -33,13 +33,20 @@ public class AuditController {
             @RequestParam(value = "module", required = false) String module,
             @RequestParam(value = "startDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(value = "from", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam(value = "endDate", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
+            @RequestParam(value = "to", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to,
             @RequestParam(value = "page", defaultValue = "0") int page,
             @RequestParam(value = "size", defaultValue = "50") int size
     ) {
+        LocalDateTime effectiveStart = from != null ? from : startDate;
+        LocalDateTime effectiveEnd = to != null ? to : endDate;
+
         List<AuditLog> logs = auditService.searchAuditLogs(
-                username, userId, action, module, startDate, endDate, PageRequest.of(page, size)
+                username, userId, action, module, effectiveStart, effectiveEnd, PageRequest.of(page, size)
         );
         return ResponseEntity.ok(logs);
     }

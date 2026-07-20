@@ -47,6 +47,33 @@ public class ReportController {
         return ResponseEntity.ok(reportService.getAllReports());
     }
 
+    @PostMapping("/generate")
+    public ResponseEntity<TravelReport> generateReportJson(
+            @RequestBody(required = false) java.util.Map<String, Object> body,
+            Principal principal) {
+        String title = body != null && body.get("title") != null ? body.get("title").toString() : "Travel Analytics Report";
+        String reportType = body != null && body.get("reportType") != null ? body.get("reportType").toString() : "SUMMARY";
+        String parameters = body != null && body.get("filters") != null ? body.get("filters").toString() : null;
+        String username = principal != null ? principal.getName() : "SYSTEM";
+        return ResponseEntity.ok(reportService.generateReport(title, reportType, parameters, username));
+    }
+
+    @GetMapping("/{id}/export")
+    public ResponseEntity<?> exportReport(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "csv") String format) {
+        String filename = "report-" + id + "." + ("pdf".equalsIgnoreCase(format) ? "pdf" : "csv");
+        String contentType = "pdf".equalsIgnoreCase(format) ? "application/pdf" : "text/csv";
+        
+        String content = "Report ID,Title,Report Type,Generated Date\n"
+                + id + ",Travel Analytics Report,SUMMARY," + java.time.LocalDateTime.now() + "\n";
+        
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
+                .body(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
     @GetMapping("/type/{type}")
     public ResponseEntity<List<TravelReport>> getReportsByType(@PathVariable String type) {
         return ResponseEntity.ok(reportService.getReportsByType(type));

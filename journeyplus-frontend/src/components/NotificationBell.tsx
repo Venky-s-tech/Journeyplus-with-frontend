@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Bell, Check, Trash } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useNotifications, useMarkNotificationRead, useDismissNotification } from "../hooks";
 import { cn } from "../lib/utils";
 
@@ -9,9 +9,37 @@ export const NotificationBell: React.FC = () => {
   const { data } = useNotifications();
   const markReadMutation = useMarkNotificationRead();
   const dismissMutation = useDismissNotification();
+  const navigate = useNavigate();
 
   const notifications = data?.notifications || [];
   const unreadCount = notifications.filter((n) => !n.read && n.status !== "Dismissed").length;
+
+  const handleNotificationClick = (n: any) => {
+    if (!n.read) {
+      markReadMutation.mutate(n.id);
+    }
+    setIsOpen(false);
+    switch (n.category) {
+      case "TripRequest":
+        navigate("/trips");
+        break;
+      case "Advance":
+        navigate("/advances");
+        break;
+      case "ExpenseClaim":
+        navigate("/expenses");
+        break;
+      case "PolicyException":
+        navigate("/compliance/exceptions");
+        break;
+      case "Compliance":
+        navigate("/compliance/auditing");
+        break;
+      default:
+        navigate("/notifications");
+        break;
+    }
+  };
 
   return (
     <div className="relative">
@@ -55,7 +83,10 @@ export const NotificationBell: React.FC = () => {
                       !n.read && "bg-muted/10"
                     )}
                   >
-                    <div className="flex-1 flex flex-col gap-0.5">
+                    <div 
+                      className="flex-1 flex flex-col gap-0.5 cursor-pointer"
+                      onClick={() => handleNotificationClick(n)}
+                    >
                       <span className="font-medium text-xs text-foreground">{n.title}</span>
                       <span className="text-[11px] text-muted-foreground line-clamp-2">
                         {n.message}

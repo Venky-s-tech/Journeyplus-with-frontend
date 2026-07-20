@@ -55,4 +55,17 @@ public class AuthController {
         AuthResponse response = authService.refresh(request.getRefreshToken());
         return ResponseEntity.ok(response);
     }
+
+    @org.springframework.web.bind.annotation.GetMapping("/me")
+    public ResponseEntity<UserResponse> getMe(@org.springframework.security.core.annotation.AuthenticationPrincipal User user) {
+        if (user == null) {
+            return ResponseEntity.status(401).build();
+        }
+        return ResponseEntity.ok(new UserResponse(user));
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<java.util.Map<String, String>> logout() {
+        return ResponseEntity.ok(java.util.Map.of("message", "Logged out successfully"));
+    }
 }

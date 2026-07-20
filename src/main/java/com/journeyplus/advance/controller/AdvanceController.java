@@ -130,6 +130,29 @@ public class AdvanceController {
         return ResponseEntity.ok(toAdvanceResponse(saved));
     }
 
+    @PatchMapping("/api/advances/{id}/status")
+    public ResponseEntity<AdvanceResponse> updateAdvanceStatusPatch(
+            @PathVariable Long id,
+            @RequestBody java.util.Map<String, String> body,
+            @AuthenticationPrincipal User user) {
+        String statusStr = body.get("status");
+        if (statusStr == null || statusStr.isBlank()) {
+            throw new IllegalArgumentException("Status is required");
+        }
+        AdvanceStatus newStatus = AdvanceStatus.valueOf(statusStr.toUpperCase());
+        AdvanceRequest saved;
+        if (newStatus == AdvanceStatus.APPROVED) {
+            saved = advanceService.approveAdvanceRequest(id, user);
+        } else if (newStatus == AdvanceStatus.DISBURSED) {
+            saved = advanceService.disburseAdvanceRequest(id);
+        } else if (newStatus == AdvanceStatus.FORFEITED) {
+            saved = advanceService.forfeitAdvanceRequest(id);
+        } else {
+            saved = advanceService.getAdvanceRequest(id);
+        }
+        return ResponseEntity.ok(toAdvanceResponse(saved));
+    }
+
     // ==========================================
     // ADVANCE SETTLEMENT ENDPOINTS
     // ==========================================
@@ -142,7 +165,6 @@ public class AdvanceController {
             @AuthenticationPrincipal User user) {
 
         AdvanceRequest request = advanceService.getAdvanceRequest(advanceId);
-        // Enforce that employee can only settle their own advance
         if (user.getRole() == com.journeyplus.iam.entity.Role.EMPLOYEE && !request.getEmployee().getId().equals(user.getId())) {
             throw new org.springframework.security.access.AccessDeniedException("Only the Advance Owner or Finance can settle this advance");
         }
@@ -154,6 +176,15 @@ public class AdvanceController {
 
         AdvanceSettlement saved = advanceService.addSettlement(advanceId, settlement);
         return ResponseEntity.ok(toSettlementResponse(saved));
+    }
+
+    @PostMapping("/api/advances/{id}/settlement")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'FINANCE')")
+    public ResponseEntity<AdvanceSettlementResponse> addSettlementSingular(
+            @PathVariable Long id,
+            @Valid @RequestBody AdvanceSettlementInput input,
+            @AuthenticationPrincipal User user) {
+        return addSettlement(id, input, user);
     }
 
     // Alias for backward compatibility

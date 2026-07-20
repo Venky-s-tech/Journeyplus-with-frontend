@@ -64,7 +64,7 @@ public class TripRequest {
     @Column(columnDefinition = "TEXT")
     private String comments;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "approver_id")
     private User approver;
 

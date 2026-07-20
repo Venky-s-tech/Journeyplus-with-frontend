@@ -169,7 +169,7 @@ export const Dashboard: React.FC = () => {
   // Render Manager Dashboard
   const renderManager = () => {
     const pendingTrips = trips?.filter((t) => t.status === "SUBMITTED") || [];
-    const pendingAdvances = advances?.filter((a) => a.status === "PENDING_APPROVAL") || [];
+    const pendingAdvances = advances?.filter((a) => (a.status as string) === "REQUESTED") || [];
     // Claims wait list (for this demo we fetch claims and filter by status)
     const pendingClaims = claims?.filter((c) => c.status === "SUBMITTED") || [];
 

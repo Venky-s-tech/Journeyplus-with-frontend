@@ -198,6 +198,7 @@ public class NotificationController {
     }
 
     @PostMapping("/{id}/read")
+    @PatchMapping("/{id}/read")
     @Transactional
     public ResponseEntity<Map<String, Object>> markAsRead(@PathVariable Long id, @AuthenticationPrincipal User user) {
         if (user == null) {

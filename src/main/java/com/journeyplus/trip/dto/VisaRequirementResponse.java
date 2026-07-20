@@ -36,9 +36,18 @@ public class VisaRequirementResponse {
     public LocalDateTime getUpdatedDate() { return updatedDate; }
     public void setUpdatedDate(LocalDateTime updatedDate) { this.updatedDate = updatedDate; }
 
-    // Deprecated getters and setters for backward compatibility
-    @Deprecated
-    public String getDestinationCountry() { return country; }
-    @Deprecated
-    public void setDestinationCountry(String destinationCountry) { this.country = destinationCountry; }
+    public VisaRequirementResponse() {}
+
+    public VisaRequirementResponse(com.journeyplus.trip.entity.VisaRequirement visa) {
+        if (visa != null) {
+            this.id = visa.getId();
+            this.country = visa.getCountry();
+            this.visaType = visa.getVisaType();
+            this.requiresVisa = visa.isRequiresVisa();
+            this.applicationDate = visa.getApplicationDate();
+            this.submittedDate = visa.getSubmittedDate();
+            this.status = visa.getStatus() != null ? visa.getStatus().name() : null;
+            this.notes = visa.getNotes();
+        }
+    }
 }
