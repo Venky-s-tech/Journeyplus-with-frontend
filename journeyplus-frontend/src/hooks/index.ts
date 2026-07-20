@@ -572,3 +572,4 @@ export const usePolicies = () => {
 };
 
 export * from "./useAnalytics";
+export * from "./useTravelDesk";

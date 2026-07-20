@@ -13,6 +13,7 @@ import {
   useBookItineraryLeg,
   useAddVisaRequirement,
   useUpdateVisaRequirement,
+  useTripTravelDetails,
 } from "../../hooks";
 import { useToast } from "../../components/ui/toast";
 import { Button } from "../../components/ui/button";
@@ -32,6 +33,9 @@ import {
   Bookmark,
   CheckCircle,
   FileCheck,
+  Building,
+  Ticket,
+  MessageSquare,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
 
@@ -43,6 +47,7 @@ export const TripDetails: React.FC = () => {
   const tripId = Number(id);
 
   const { data: trip, isLoading, error } = useTrip(tripId);
+  const { data: travelDetails } = useTripTravelDetails(tripId);
 
   // Mutations
   const submitMutation = useSubmitTrip();
@@ -296,6 +301,33 @@ export const TripDetails: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {/* Travel Desk Booking Status Confirmation Banner */}
+      {travelDetails && (
+        <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <Ticket className="h-4 w-4 text-primary" /> Travel Desk Booking Status
+            </h2>
+            <StatusBadge status={travelDetails.bookingStatus || "PENDING"} />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs border-t border-border pt-3">
+            <div>
+              <span className="font-bold text-muted-foreground uppercase text-[10px]">Booking Reference / PNR</span>
+              <p className="font-mono font-semibold text-sm">{travelDetails.pnr || travelDetails.bookingRef || "PNR-PENDING"}</p>
+            </div>
+            <div>
+              <span className="font-bold text-muted-foreground uppercase text-[10px]">Ticket Number</span>
+              <p className="font-mono font-semibold text-sm">{travelDetails.ticketNumber || "TKT-PENDING"}</p>
+            </div>
+            <div>
+              <span className="font-bold text-muted-foreground uppercase text-[10px]">Travel Desk Remarks</span>
+              <p className="text-xs text-foreground font-medium">{travelDetails.travelRemarks || "No remarks provided."}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Info Blocks */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

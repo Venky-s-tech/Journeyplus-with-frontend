@@ -21,6 +21,10 @@ import { Analytics } from "./pages/analytics/Analytics";
 import { TripsList } from "./pages/trips/TripsList";
 import { TripDetails } from "./pages/trips/TripDetails";
 
+// Travel Desk Pages
+import { TravelDeskQueue } from "./pages/traveldesk/TravelDeskQueue";
+import { TravelDeskDetails } from "./pages/traveldesk/TravelDeskDetails";
+
 // Advances Pages
 import { Advances } from "./pages/advances/Advances";
 
@@ -104,6 +108,28 @@ export const App: React.FC = () => {
                   <RoleGuard allowedRoles={["EMPLOYEE", "TRAVEL_DESK", "ADMIN", "APPROVING_MANAGER"]}>
                     <AppShell>
                       <TripDetails />
+                    </AppShell>
+                  </RoleGuard>
+                }
+              />
+
+              {/* Travel Desk paths */}
+              <Route
+                path="/travel-desk"
+                element={
+                  <RoleGuard allowedRoles={["TRAVEL_DESK", "ADMIN"]}>
+                    <AppShell>
+                      <TravelDeskQueue />
+                    </AppShell>
+                  </RoleGuard>
+                }
+              />
+              <Route
+                path="/travel-desk/bookings/:id"
+                element={
+                  <RoleGuard allowedRoles={["TRAVEL_DESK", "ADMIN"]}>
+                    <AppShell>
+                      <TravelDeskDetails />
                     </AppShell>
                   </RoleGuard>
                 }

@@ -390,6 +390,27 @@ public class TripRequestController {
         return r;
     }
 
+    @GetMapping("/{id}/travel-details")
+    public ResponseEntity<java.util.Map<String, Object>> getTripTravelDetails(@PathVariable Long id) {
+        TripRequest trip = tripService.getTripRequest(id);
+        List<ItineraryLeg> legs = itineraryLegRepository.findByTripRequest_Id(id);
+        List<VisaRequirement> visas = visaRequirementRepository.findByTripRequest_Id(id);
+
+        java.util.Map<String, Object> out = new java.util.HashMap<>();
+        out.put("trip", toTripResponse(trip));
+        out.put("itineraryLegs", legs.stream().map(ItineraryLegResponse::new).collect(Collectors.toList()));
+        out.put("visaRequirements", visas.stream().map(VisaRequirementResponse::new).collect(Collectors.toList()));
+        out.put("bookingStatus", legs.isEmpty() ? "PENDING" : (legs.stream().allMatch(l -> l.getStatus() == com.journeyplus.trip.entity.ItineraryStatus.CONFIRMED) ? "CONFIRMED" : "IN_PROGRESS"));
+        out.put("travelRemarks", trip.getComments() != null ? trip.getComments() : "No remarks.");
+
+        String pnr = legs.stream().filter(l -> l.getBookingRef() != null && !l.getBookingRef().isBlank()).map(ItineraryLeg::getBookingRef).findFirst().orElse("PNR-PENDING");
+        out.put("pnr", pnr);
+        out.put("bookingRef", pnr);
+        out.put("ticketNumber", "TKT-" + id + "-" + System.currentTimeMillis() % 10000);
+
+        return ResponseEntity.ok(out);
+    }
+
     private VisaRequirementResponse toVisaResponse(VisaRequirement v) {
         if (v == null) return null;
         VisaRequirementResponse r = new VisaRequirementResponse();

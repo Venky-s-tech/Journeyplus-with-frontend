@@ -58,13 +58,7 @@ export const useFinanceDashboard = () => {
   });
 };
 
-export const useTravelDeskDashboard = () => {
-  return useQuery({
-    queryKey: ["dashboard-traveldesk"],
-    queryFn: getTravelDeskDashboard,
-    staleTime: 30000,
-  });
-};
+
 
 export const useComplianceDashboard = () => {
   return useQuery({

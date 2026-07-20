@@ -20,6 +20,7 @@ import {
   Compass,
   FileText,
   History,
+  FileCheck,
 } from "lucide-react";
 import { Button } from "./ui/button";
 
@@ -68,6 +69,7 @@ export const AppShell: React.FC<{ children: React.ReactNode }> = ({ children }) 
       case "TRAVEL_DESK":
         return [
           ...common,
+          { name: "Booking Queue", path: "/travel-desk", icon: FileCheck },
           { name: "Trips & Bookings", path: "/trips", icon: Plane },
         ];
       case "APPROVING_MANAGER":
