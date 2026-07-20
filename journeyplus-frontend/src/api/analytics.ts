@@ -1,60 +1,86 @@
 import api from "../lib/axios";
 
 export interface DashboardSummaryResponse {
-  role: string;
-  userId: number;
+  role?: string;
+  userId?: number;
+  // Admin fields
+  totalUsers?: number;
+  activeUsers?: number;
+  inactiveUsers?: number;
+  pendingUserApprovals?: number;
   totalTrips?: number;
-  upcomingTrips?: number;
   draftTrips?: number;
-  pendingApprovalTrips?: number;
+  submittedTrips?: number;
   approvedTrips?: number;
   rejectedTrips?: number;
   completedTrips?: number;
+  cancelledTrips?: number;
   totalExpenseClaims?: number;
-  draftClaims?: number;
-  submittedClaims?: number;
-  approvedClaims?: number;
-  rejectedClaims?: number;
+  pendingExpenseClaims?: number;
+  approvedExpenseClaims?: number;
+  rejectedExpenseClaims?: number;
   paidClaims?: number;
-  advanceRequests?: number;
+  totalExpenseAmount?: number;
+  totalAdvances?: number;
   pendingAdvances?: number;
   approvedAdvances?: number;
+  disbursedAdvances?: number;
   settledAdvances?: number;
+  totalPolicies?: number;
+  activePolicies?: number;
+  unreadNotifications?: number;
+  totalComplianceCases?: number;
+
+  // Employee fields
+  myTrips?: number;
+  myExpenseClaims?: number;
+  myAdvances?: number;
+  upcomingTrips?: number;
+  pendingTrips?: number;
+  pendingClaims?: number;
+  approvedClaims?: number;
+  rejectedClaims?: number;
   activeCashAdvanceAmount?: number;
+
+  // Manager fields
+  tripsAwaitingApproval?: number;
+  expenseClaimsAwaitingApproval?: number;
+  advanceRequestsAwaitingApproval?: number;
   pendingTripApprovals?: number;
   pendingExpenseApprovals?: number;
   pendingAdvanceRequests?: number;
-  teamTravelSummaryCount?: number;
-  teamExpenseSummaryCount?: number;
+  submittedClaims?: number;
+  teamTripCount?: number;
+  teamExpenseAmount?: number;
   employeesCurrentlyTravelling?: number;
-  pendingBookings?: number;
-  flightBookings?: number;
-  hotelBookings?: number;
-  visaRequests?: number;
-  completedItineraries?: number;
-  upcomingTravel?: number;
+  recentApprovals?: number;
+
+  // Finance fields
   pendingReimbursements?: number;
-  pendingAdvanceDisbursements?: number;
+  pendingDisbursements?: number;
   processedPayments?: number;
   failedPayments?: number;
+  monthlyReimbursementAmount?: number;
+  monthlyAdvanceAmount?: number;
   totalBudgetAllocated?: number;
   totalDisbursedAdvances?: number;
-  totalExpenseSpend?: number;
-  policyExceptions?: number;
+
+  // Travel Desk fields
+  pendingBookings?: number;
+  completedItineraries?: number;
+  visaRequests?: number;
+  travelRequests?: number;
+  flightBookings?: number;
+  hotelBookings?: number;
+  upcomingTravel?: number;
+
+  // Compliance fields
   openExceptions?: number;
+  closedExceptions?: number;
+  escalatedExceptions?: number;
+  policyViolations?: number;
   highValueClaims?: number;
   auditSummaryCount?: number;
-  users?: number;
-  activeUsers?: number;
-  inactiveUsers?: number;
-  departments?: number;
-  roles?: number;
-  trips?: number;
-  expenses?: number;
-  policies?: number;
-  advances?: number;
-  complianceCases?: number;
-  activeGrades?: number;
 }
 
 export interface AnalyticsSummaryResponse {
@@ -81,38 +107,8 @@ export interface MonthlyTrendItem {
 
 export const getDashboardSummary = async (role?: string): Promise<DashboardSummaryResponse> => {
   const response = await api.get<DashboardSummaryResponse>("/api/dashboard/summary", {
-    params: { role },
+    params: role ? { role } : {},
   });
-  return response.data;
-};
-
-export const getAdminDashboard = async (): Promise<any> => {
-  const response = await api.get("/api/dashboard/admin");
-  return response.data;
-};
-
-export const getEmployeeDashboard = async (): Promise<any> => {
-  const response = await api.get("/api/dashboard/employee");
-  return response.data;
-};
-
-export const getManagerDashboard = async (): Promise<any> => {
-  const response = await api.get("/api/dashboard/manager");
-  return response.data;
-};
-
-export const getFinanceDashboard = async (): Promise<any> => {
-  const response = await api.get("/api/dashboard/finance");
-  return response.data;
-};
-
-export const getTravelDeskDashboard = async (): Promise<any> => {
-  const response = await api.get("/api/dashboard/traveldesk");
-  return response.data;
-};
-
-export const getComplianceDashboard = async (): Promise<any> => {
-  const response = await api.get("/api/dashboard/compliance");
   return response.data;
 };
 
