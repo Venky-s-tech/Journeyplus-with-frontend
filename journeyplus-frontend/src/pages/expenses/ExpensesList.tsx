@@ -21,14 +21,7 @@ export const ExpensesList: React.FC = () => {
   // Form state
   const [selectedTripId, setSelectedTripId] = useState("");
   const [title, setTitle] = useState("");
-  // "approver username need to ask" + "cost need to claim": the create
-  // dialog now also captures the approver and at least one initial expense
-  // line, since the backend's createExpenseClaim already supports embedding
-  // lines (claimRequest.getExpenseLines()) - it just wasn't being used.
   const [approverUsername, setApproverUsername] = useState("");
-  const [lineCategory, setLineCategory] = useState<"ACCOMMODATION" | "MEALS" | "TRANSPORT" | "VISA" | "MISC">("MEALS");
-  const [lineDate, setLineDate] = useState("");
-  const [lineAmount, setLineAmount] = useState(0);
 
   const { data: claims, isLoading } = useClaims(user?.role || "EMPLOYEE");
   const { data: trips } = useTrips("EMPLOYEE");
@@ -103,30 +96,16 @@ export const ExpensesList: React.FC = () => {
           submittedDate: new Date().toISOString().split("T")[0],
           originalCurrency: "USD",
           approverUsername,
-          // "cost need to claim": capture at least one expense line right
-          // at creation instead of leaving the claim at $0 until a second
-          // trip to the Details page - the backend already supports this
-          // via ExpenseClaimRequest.expenseLines.
-          expenseLines: [
-            {
-              expenseDate: lineDate,
-              category: lineCategory,
-              amount: Number(lineAmount),
-              originalCurrency: "USD",
-            },
-          ],
         },
       },
       {
         onSuccess: (data) => {
-          toast("Expense claim created", "success", "Created");
+          toast("Expense draft claim created", "success", "Created");
           setIsOpen(false);
           setTitle("");
           setSelectedTripId("");
           setApproverUsername("");
-          setLineDate("");
-          setLineAmount(0);
-          // Redirect to details to add further receipt lines if needed
+          // Redirect to details view to add expense lines
           navigate(`/expenses/${data.id}`);
         },
         onError: (err: any) => {
@@ -279,40 +258,6 @@ export const ExpensesList: React.FC = () => {
                     <p className="text-[10px] text-muted-foreground">Auto-filled from the trip's approver - edit only if a different manager should approve this claim.</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <Label htmlFor="lineCategory">Expense Category</Label>
-                      <select
-                        id="lineCategory"
-                        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors text-foreground"
-                        value={lineCategory}
-                        onChange={(e: any) => setLineCategory(e.target.value)}
-                      >
-                        <option value="ACCOMMODATION">Accommodation</option>
-                        <option value="MEALS">Meals / Food</option>
-                        <option value="TRANSPORT">Transport / Conveyance</option>
-                        <option value="VISA">Visa Fees</option>
-                        <option value="MISC">Miscellaneous</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="lineDate">Expense Date</Label>
-                      <Input id="lineDate" type="date" required value={lineDate} onChange={(e) => setLineDate(e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="lineAmount">Cost (USD)</Label>
-                    <Input
-                      id="lineAmount"
-                      type="number"
-                      required
-                      min={1}
-                      value={lineAmount}
-                      onChange={(e) => setLineAmount(Number(e.target.value))}
-                    />
-                  </div>
-
                   <div className="flex justify-end gap-2 pt-2">
                     <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
                       Cancel
@@ -321,7 +266,7 @@ export const ExpensesList: React.FC = () => {
                       type="submit"
                       disabled={createMutation.isPending || (!!selectedTripId && tripIdsWithExistingClaim.has(Number(selectedTripId)))}
                     >
-                      {createMutation.isPending ? "Creating..." : "Create Claim"}
+                      {createMutation.isPending ? "Creating..." : "Create Draft Claim"}
                     </Button>
                   </div>
                 </form>

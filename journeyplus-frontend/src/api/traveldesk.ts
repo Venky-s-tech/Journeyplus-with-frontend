@@ -32,110 +32,43 @@ export interface TravelDeskQueueItem {
   visaStatus: string;
 }
 
-export const getPendingBookings = async (): Promise<TravelDeskQueueItem[]> => {
-  const tripsResponse = await api.get<any[]>("/api/trips", {
-    params: { status: "APPROVED" },
-  });
-
-  const queueItems: TravelDeskQueueItem[] = [];
-  for (const t of tripsResponse.data) {
-    let itineraryLegs: any[] = [];
-    try {
-      const legResp = await api.get(`/api/trips/${t.id}/itinerary`);
-      itineraryLegs = legResp.data || [];
-    } catch (e) {
-      itineraryLegs = [];
-    }
-
-    let visaStatus = "NOT_REQUIRED";
-    if (t.travelType === "INTERNATIONAL") {
-      try {
-        const visaResp = await api.get(`/api/trips/${t.id}/visa`);
-        const visas = visaResp.data || [];
-        if (visas.length > 0) {
-          visaStatus = visas[0].status || "PENDING";
-        } else {
-          visaStatus = "REQUIRED";
-        }
-      } catch (e) {
-        visaStatus = "REQUIRED";
-      }
-    }
-
-    const hasLegs = itineraryLegs.length > 0;
-    const allBooked = hasLegs && itineraryLegs.every((l: any) => l.status === "CONFIRMED");
-
-    // If NO itinerary exists, or not all legs are booked, display in Booking Queue
-    if (!hasLegs || !allBooked) {
-      queueItems.push({
-        tripId: t.id,
-        id: t.id,
-        employeeName: t.employee?.name || t.employee?.username || "Employee",
-        department: "Engineering",
-        destination: t.destination,
-        travelType: t.travelType,
-        departureDate: t.departureDate,
-        returnDate: t.returnDate,
-        purpose: t.purpose,
-        estimatedCost: t.estimatedCost,
-        status: t.status,
-        bookingStatus: hasLegs ? (allBooked ? "CONFIRMED" : "IN_PROGRESS") : "PENDING",
-        visaStatus,
-      });
-    }
-  }
-
-  return queueItems;
+export const getTravelDeskDashboard = async (): Promise<TravelDeskMetrics> => {
+  const response = await api.get<any>("/api/travel-desk/dashboard");
+  const data = response.data || {};
+  return {
+    pendingBookings: data.pendingBookings || 0,
+    completedBookings: data.completedBookings || 0,
+    waitingForItinerary: data.waitingForItinerary || 0,
+    waitingForVisa: data.waitingForVisa || 0,
+    todaysTravel: 0,
+    upcomingTravel: data.upcomingTrips || 0,
+    internationalTrips: data.travelRequests || 0,
+    domesticTrips: 0,
+    recentlyCompleted: data.completedBookings || 0,
+    flightBookings: data.flightBookings || 0,
+    hotelBookings: data.hotelBookings || 0,
+    visaRequests: data.waitingForVisa || 0,
+    completedItineraries: data.completedBookings || 0,
+  };
 };
 
-export const getTravelDeskDashboard = async (): Promise<TravelDeskMetrics> => {
-  const allApprovedTripsResp = await api.get<any[]>("/api/trips", {
-    params: { status: "APPROVED" },
-  });
-
-  let waitingForItinerary = 0;
-  let waitingForVisa = 0;
-  let completedBookings = 0;
-
-  for (const t of allApprovedTripsResp.data) {
-    let legs: any[] = [];
-    try {
-      const lResp = await api.get(`/api/trips/${t.id}/itinerary`);
-      legs = lResp.data || [];
-    } catch (e) {
-      legs = [];
-    }
-
-    if (legs.length === 0) {
-      waitingForItinerary++;
-    } else if (legs.every((l: any) => l.status === "CONFIRMED")) {
-      completedBookings++;
-    }
-
-    if (t.travelType === "INTERNATIONAL") {
-      try {
-        const vResp = await api.get(`/api/trips/${t.id}/visa`);
-        const visas = vResp.data || [];
-        if (visas.length === 0 || visas.some((v: any) => v.status !== "GRANTED" && v.status !== "APPROVED")) {
-          waitingForVisa++;
-        }
-      } catch (e) {
-        waitingForVisa++;
-      }
-    }
-  }
-
-  return {
-    pendingBookings: waitingForItinerary,
-    completedBookings,
-    waitingForItinerary,
-    waitingForVisa,
-    todaysTravel: 0,
-    upcomingTravel: allApprovedTripsResp.data.length,
-    internationalTrips: allApprovedTripsResp.data.filter((t: any) => t.travelType === "INTERNATIONAL").length,
-    domesticTrips: allApprovedTripsResp.data.filter((t: any) => t.travelType === "DOMESTIC").length,
-    recentlyCompleted: completedBookings,
-  };
+export const getPendingBookings = async (): Promise<TravelDeskQueueItem[]> => {
+  const response = await api.get<any[]>("/api/travel-desk/queue");
+  return (response.data || []).map((t: any) => ({
+    tripId: t.tripId || t.id,
+    id: t.id || t.tripId,
+    employeeName: t.employeeName || "Employee",
+    department: t.department || "General",
+    destination: t.destination,
+    travelType: t.travelType,
+    departureDate: t.departureDate,
+    returnDate: t.returnDate,
+    purpose: t.purpose,
+    estimatedCost: t.estimatedCost,
+    status: t.status,
+    bookingStatus: t.bookingStatus || "PENDING_BOOKING",
+    visaStatus: t.visaStatus || "NOT_REQUIRED",
+  }));
 };
 
 export const getUpcomingBookings = async (): Promise<TravelDeskQueueItem[]> => {
@@ -143,61 +76,58 @@ export const getUpcomingBookings = async (): Promise<TravelDeskQueueItem[]> => {
 };
 
 export const addItineraryLeg = async (tripId: number, data: any): Promise<any> => {
-  const response = await api.post(`/api/trips/${tripId}/itinerary`, data);
+  const response = await api.post("/api/travel-desk/itinerary", data, {
+    params: { tripId },
+  });
   return response.data;
 };
 
 export const updateItineraryLeg = async (tripId: number, legId: number, data: any): Promise<any> => {
-  const response = await api.put(`/api/itinerary/${legId}`, data);
+  const response = await api.put(`/api/travel-desk/itinerary/${legId}`, data);
   return response.data;
 };
 
 export const deleteItineraryLeg = async (tripId: number, legId: number): Promise<any> => {
-  const response = await api.delete(`/api/itinerary/${legId}`);
+  const response = await api.delete(`/api/travel-desk/itinerary/${legId}`);
   return response.data;
 };
 
 export const bookItineraryLeg = async (tripId: number, legId: number, data: any): Promise<any> => {
-  const response = await api.post(`/api/trips/${tripId}/legs/${legId}/book`, data);
+  const response = await api.put(`/api/travel-desk/itinerary/${legId}`, data);
   return response.data;
 };
 
 export const addVisaRequirement = async (tripId: number, data: any): Promise<any> => {
-  const response = await api.post(`/api/trips/${tripId}/visa`, data);
+  const response = await api.post("/api/travel-desk/visa", data, {
+    params: { tripId },
+  });
   return response.data;
 };
 
 export const updateVisaRequirement = async (tripId: number, visaId: number, data: any): Promise<any> => {
-  const response = await api.put(`/api/visa/${visaId}`, data);
+  const response = await api.put("/api/travel-desk/visa/status", {
+    visaId,
+    status: data.status,
+    notes: data.notes,
+  });
   return response.data;
 };
 
 export const confirmBooking = async (tripId: number, comments?: string): Promise<any> => {
-  const response = await api.post(`/api/trips/${tripId}/complete`);
+  const response = await api.post(`/api/travel-desk/booking/confirm/${tripId}`, null, {
+    params: { comments },
+  });
+  return response.data;
+};
+
+export const rejectTripBack = async (tripId: number, comments?: string): Promise<any> => {
+  const response = await api.post(`/api/travel-desk/reject/${tripId}`, null, {
+    params: { comments },
+  });
   return response.data;
 };
 
 export const getTripTravelDetails = async (tripId: number): Promise<any> => {
-  const tripResp = await api.get(`/api/trips/${tripId}`);
-  const legsResp = await api.get(`/api/trips/${tripId}/itinerary`);
-  const visasResp = await api.get(`/api/trips/${tripId}/visa`);
-
-  const legs = legsResp.data || [];
-  const visas = visasResp.data || [];
-  const trip = tripResp.data;
-
-  const hasLegs = legs.length > 0;
-  const allConfirmed = hasLegs && legs.every((l: any) => l.status === "CONFIRMED");
-  const pnr = legs.find((l: any) => l.bookingRef)?.bookingRef || "PNR-PENDING";
-
-  return {
-    trip,
-    itineraryLegs: legs,
-    visaRequirements: visas,
-    bookingStatus: allConfirmed ? "CONFIRMED" : (hasLegs ? "IN_PROGRESS" : "PENDING"),
-    travelRemarks: trip.comments || "No remarks.",
-    pnr,
-    bookingRef: pnr,
-    ticketNumber: `TKT-${tripId}-${tripId * 100}`,
-  };
+  const response = await api.get(`/api/trips/${tripId}/travel-details`);
+  return response.data;
 };

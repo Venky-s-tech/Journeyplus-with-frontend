@@ -214,6 +214,27 @@ public class TripService {
         }
         TripRequest saved = tripRequestRepository.save(trip);
 
+        // For INTERNATIONAL trips, automatically queue a VisaRequirement if none exists
+        if (newStatus == TripStatus.APPROVED && saved.getTravelType() != null &&
+                ("INTERNATIONAL".equalsIgnoreCase(saved.getTravelType()) || "INTL".equalsIgnoreCase(saved.getTravelType()))) {
+            try {
+                List<VisaRequirement> existingVisas = visaRequirementRepository.findByTripRequest_Id(saved.getId());
+                if (existingVisas == null || existingVisas.isEmpty()) {
+                    VisaRequirement visa = new VisaRequirement(
+                            saved,
+                            saved.getDestination() != null ? saved.getDestination() : "International",
+                            "BUSINESS",
+                            true,
+                            VisaStatus.PENDING,
+                            "Auto-generated visa requirement on trip approval"
+                    );
+                    visaRequirementRepository.save(visa);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to auto-create visa requirement for approved international trip ID {}: {}", saved.getId(), e.getMessage());
+            }
+        }
+
         // Notify employee
         eventPublisher.publishEvent(new StatusChangeEvent(
                 trip.getEmployee().getId(),

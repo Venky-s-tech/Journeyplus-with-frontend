@@ -14,8 +14,10 @@ import com.journeyplus.iam.entity.User;
 import com.journeyplus.iam.repository.GradeRepository;
 import com.journeyplus.iam.repository.UserRepository;
 import com.journeyplus.policy.repository.TravelPolicyRepository;
+import com.journeyplus.trip.entity.ItineraryLeg;
 import com.journeyplus.trip.entity.TripRequest;
 import com.journeyplus.trip.entity.TripStatus;
+import com.journeyplus.trip.entity.VisaRequirement;
 import com.journeyplus.trip.repository.ItineraryLegRepository;
 import com.journeyplus.trip.repository.TripRequestRepository;
 import com.journeyplus.trip.repository.VisaRequirementRepository;
@@ -226,16 +228,74 @@ public class DashboardController {
     @GetMapping("/traveldesk")
     public ResponseEntity<Map<String, Object>> getTravelDeskDashboard() {
         List<TripRequest> allTrips = tripRequestRepository.findAll();
-        List<TripRequest> approvedTrips = allTrips.stream().filter(t -> t.getStatus() == TripStatus.APPROVED).collect(Collectors.toList());
+        List<TripRequest> approvedTrips = allTrips.stream()
+                .filter(t -> t.getStatus() == TripStatus.APPROVED)
+                .collect(Collectors.toList());
+
+        List<ItineraryLeg> allLegs = itineraryLegRepository.findAll();
+        List<VisaRequirement> allVisas = visaRequirementRepository.findAll();
+
+        Map<Long, List<ItineraryLeg>> legsByTrip = allLegs.stream()
+                .filter(l -> l.getTripRequest() != null)
+                .collect(Collectors.groupingBy(l -> l.getTripRequest().getId()));
+
+        Map<Long, List<VisaRequirement>> visasByTrip = allVisas.stream()
+                .filter(v -> v.getTripRequest() != null)
+                .collect(Collectors.groupingBy(v -> v.getTripRequest().getId()));
+
+        long pendingBookings = 0;
+        long completedItineraries = 0;
+        long visaRequests = 0;
+        long flightBookings = 0;
+        long hotelBookings = 0;
+
+        for (TripRequest t : approvedTrips) {
+            List<ItineraryLeg> legs = legsByTrip.getOrDefault(t.getId(), java.util.Collections.emptyList());
+            boolean hasLegs = !legs.isEmpty();
+            boolean allBooked = hasLegs && legs.stream().allMatch(l -> l.getStatus() == com.journeyplus.trip.entity.ItineraryStatus.CONFIRMED);
+
+            String bookingStatus = t.getBookingStatus();
+            boolean isPendingBooking = bookingStatus == null || "PENDING_BOOKING".equalsIgnoreCase(bookingStatus) || "PENDING".equalsIgnoreCase(bookingStatus);
+
+            if (!hasLegs || isPendingBooking || !allBooked) {
+                pendingBookings++;
+            }
+
+            if (allBooked) {
+                completedItineraries++;
+            }
+
+            if (hasLegs) {
+                for (ItineraryLeg leg : legs) {
+                    if (leg.getLegType() == com.journeyplus.trip.entity.LegType.HOTEL) {
+                        hotelBookings++;
+                    } else {
+                        flightBookings++;
+                    }
+                }
+            }
+
+            if ("INTERNATIONAL".equalsIgnoreCase(t.getTravelType())) {
+                List<VisaRequirement> visas = visasByTrip.getOrDefault(t.getId(), java.util.Collections.emptyList());
+                boolean visaApproved = !visas.isEmpty() && visas.stream().allMatch(v -> 
+                    v.getStatus() == com.journeyplus.trip.dto.VisaStatus.GRANTED
+                );
+                if (!visaApproved) {
+                    visaRequests++;
+                }
+            }
+        }
+
+        long alreadyCompletedTrips = allTrips.stream().filter(t -> t.getStatus() == TripStatus.COMPLETED).count();
 
         Map<String, Object> summary = new HashMap<>();
-        summary.put("pendingBookings", approvedTrips.size());
+        summary.put("pendingBookings", pendingBookings);
         summary.put("upcomingTrips", approvedTrips.size());
-        summary.put("completedItineraries", allTrips.stream().filter(t -> t.getStatus() == TripStatus.COMPLETED).count());
-        summary.put("visaRequests", visaRequirementRepository.count());
+        summary.put("completedItineraries", completedItineraries + alreadyCompletedTrips);
+        summary.put("visaRequests", visaRequests);
         summary.put("travelRequests", allTrips.size());
-        summary.put("flightBookings", itineraryLegRepository.count());
-        summary.put("hotelBookings", itineraryLegRepository.count());
+        summary.put("flightBookings", flightBookings);
+        summary.put("hotelBookings", hotelBookings);
 
         return ResponseEntity.ok(summary);
     }

@@ -40,6 +40,7 @@ public class ExpenseService {
     private final PolicyComplianceEngine complianceEngine;
     private final ApplicationEventPublisher eventPublisher;
     private final UserRepository userRepository;
+    private final com.journeyplus.document.service.DocumentService documentService;
 
     public ExpenseService(
             ExpenseClaimRepository expenseClaimRepository,
@@ -50,7 +51,8 @@ public class ExpenseService {
             com.journeyplus.advance.repository.AdvanceSettlementRepository advanceSettlementRepository,
             PolicyComplianceEngine complianceEngine,
             ApplicationEventPublisher eventPublisher,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            com.journeyplus.document.service.DocumentService documentService) {
         this.expenseClaimRepository = expenseClaimRepository;
         this.expenseLineRepository = expenseLineRepository;
         this.reimbursementRepository = reimbursementRepository;
@@ -60,6 +62,7 @@ public class ExpenseService {
         this.complianceEngine = complianceEngine;
         this.eventPublisher = eventPublisher;
         this.userRepository = userRepository;
+        this.documentService = documentService;
     }
 
     // Standard static conversion rates for multi-currency conversion to USD
@@ -251,6 +254,67 @@ public class ExpenseService {
     }
 
     @Transactional
+    @AuditAction(module = "EXPENSE", action = "UPDATE_EXPENSE_LINE")
+    public ExpenseLine updateExpenseLine(Long claimId, Long lineId, ExpenseLine lineDetails) {
+        log.info("Attempting to update expense line ID: {} for claim ID: {}", lineId, claimId);
+        ExpenseClaim claim = expenseClaimRepository.findById(claimId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense claim not found"));
+
+        if (claim.getStatus() != ExpenseStatus.DRAFT) {
+            throw new IllegalStateException("Can only edit expense lines on DRAFT claims");
+        }
+
+        ExpenseLine line = expenseLineRepository.findById(lineId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense line not found"));
+
+        if (!line.getExpenseClaim().getId().equals(claim.getId())) {
+            throw new IllegalArgumentException("Expense line does not belong to the specified claim");
+        }
+
+        if (lineDetails.getExpenseDate() != null) line.setExpenseDate(lineDetails.getExpenseDate());
+        if (lineDetails.getCategory() != null) line.setCategory(lineDetails.getCategory());
+        if (lineDetails.getAmount() != null) line.setAmount(lineDetails.getAmount());
+        if (lineDetails.getOriginalCurrency() != null) line.setOriginalCurrency(lineDetails.getOriginalCurrency());
+        if (lineDetails.getMerchant() != null) line.setMerchant(lineDetails.getMerchant());
+        if (lineDetails.getDescription() != null) line.setDescription(lineDetails.getDescription());
+        if (lineDetails.getJustification() != null) line.setJustification(lineDetails.getJustification());
+        if (lineDetails.getReceiptRef() != null) line.setReceiptRef(lineDetails.getReceiptRef());
+        if (lineDetails.getReceiptPath() != null) line.setReceiptPath(lineDetails.getReceiptPath());
+
+        BigDecimal rate = getExchangeRateToUsd(line.getOriginalCurrency());
+        line.setUsdEquivalent(line.getAmount().multiply(rate).setScale(2, RoundingMode.HALF_UP));
+
+        ExpenseLine savedLine = expenseLineRepository.save(line);
+        complianceEngine.runComplianceCheck(savedLine);
+        savedLine = expenseLineRepository.save(savedLine);
+
+        recomputeClaimTotals(claim);
+        return savedLine;
+    }
+
+    @Transactional
+    @AuditAction(module = "EXPENSE", action = "DELETE_EXPENSE_LINE")
+    public void deleteExpenseLine(Long claimId, Long lineId) {
+        log.info("Attempting to delete expense line ID: {} for claim ID: {}", lineId, claimId);
+        ExpenseClaim claim = expenseClaimRepository.findById(claimId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense claim not found"));
+
+        if (claim.getStatus() != ExpenseStatus.DRAFT) {
+            throw new IllegalStateException("Can only delete expense lines from DRAFT claims");
+        }
+
+        ExpenseLine line = expenseLineRepository.findById(lineId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense line not found"));
+
+        if (!line.getExpenseClaim().getId().equals(claim.getId())) {
+            throw new IllegalArgumentException("Expense line does not belong to the specified claim");
+        }
+
+        expenseLineRepository.delete(line);
+        recomputeClaimTotals(claim);
+    }
+
+    @Transactional
     @AuditAction(module = "EXPENSE", action = "SUBMIT_EXPENSE_CLAIM")
     public ExpenseClaim submitExpenseClaim(Long claimId) {
         log.info("Attempting to submit expense claim ID: {}", claimId);
@@ -263,6 +327,20 @@ public class ExpenseService {
         if (claim.getStatus() != ExpenseStatus.DRAFT) {
             log.warn("Failed to submit: Claim ID {} is in state {}, only DRAFT claims can be submitted", claimId, claim.getStatus());
             throw new IllegalStateException("Only DRAFT claims can be submitted");
+        }
+
+        List<ExpenseLine> lines = expenseLineRepository.findByExpenseClaim_Id(claimId);
+        if (lines.isEmpty()) {
+            throw new IllegalStateException("Cannot submit an empty claim. At least one expense line is required.");
+        }
+
+        // Check if mandatory receipts are uploaded
+        for (ExpenseLine l : lines) {
+            String rRef = l.getReceiptRef();
+            String rPath = l.getReceiptPath();
+            if ((rRef == null || rRef.isBlank()) && (rPath == null || rPath.isBlank())) {
+                throw new IllegalStateException("Cannot submit claim: Expense line '" + l.getCategory() + "' is missing mandatory receipt.");
+            }
         }
 
         claim.setStatus(ExpenseStatus.SUBMITTED);
@@ -471,5 +549,62 @@ public class ExpenseService {
         ExpenseLine saved = expenseLineRepository.save(line);
         log.info("Expense line ID: {} re-checked and saved", saved.getId());
         return saved;
+    }
+
+    @Transactional
+    @AuditAction(module = "EXPENSE", action = "RECEIPT_UPLOADED")
+    public ExpenseLine uploadOrReplaceReceipt(Long claimId, Long lineId, org.springframework.web.multipart.MultipartFile file, User user) throws java.io.IOException {
+        log.info("Uploading receipt for line ID {} in claim ID {}", lineId, claimId);
+        ExpenseClaim claim = getExpenseClaim(claimId);
+        ExpenseLine line = expenseLineRepository.findById(lineId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense line not found: " + lineId));
+
+        if (!line.getExpenseClaim().getId().equals(claim.getId())) {
+            throw new IllegalArgumentException("Expense line does not belong to claim ID: " + claimId);
+        }
+
+        if (claim.getStatus() != ExpenseStatus.DRAFT) {
+            throw new IllegalStateException("Receipts can only be uploaded for claims in DRAFT state");
+        }
+
+        com.journeyplus.document.entity.Document doc = documentService.saveEntityDocument(file, "RECEIPT", "EXPENSE_LINE", lineId, user.getId());
+        String receiptRef = "/api/documents/" + doc.getId();
+        line.setReceiptRef(receiptRef);
+        line.setReceiptPath(doc.getPath());
+
+        complianceEngine.runComplianceCheck(line);
+        ExpenseLine savedLine = expenseLineRepository.save(line);
+        recomputeClaimTotals(claim);
+
+        log.info("Receipt uploaded successfully for line ID {}. Document ID: {}, ReceiptRef: {}", lineId, doc.getId(), receiptRef);
+        return savedLine;
+    }
+
+    @Transactional
+    @AuditAction(module = "EXPENSE", action = "RECEIPT_DELETED")
+    public ExpenseLine deleteExpenseLineReceipt(Long claimId, Long lineId, User user) throws java.io.IOException {
+        log.info("Deleting receipt for line ID {} in claim ID {}", lineId, claimId);
+        ExpenseClaim claim = getExpenseClaim(claimId);
+        ExpenseLine line = expenseLineRepository.findById(lineId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense line not found: " + lineId));
+
+        if (!line.getExpenseClaim().getId().equals(claim.getId())) {
+            throw new IllegalArgumentException("Expense line does not belong to claim ID: " + claimId);
+        }
+
+        if (claim.getStatus() != ExpenseStatus.DRAFT) {
+            throw new IllegalStateException("Receipts can only be deleted from claims in DRAFT state");
+        }
+
+        documentService.deleteEntityDocument("EXPENSE_LINE", lineId);
+        line.setReceiptRef(null);
+        line.setReceiptPath(null);
+
+        complianceEngine.runComplianceCheck(line);
+        ExpenseLine savedLine = expenseLineRepository.save(line);
+        recomputeClaimTotals(claim);
+
+        log.info("Receipt deleted for line ID {}. Missing receipt policy check re-evaluated.", lineId);
+        return savedLine;
     }
 }

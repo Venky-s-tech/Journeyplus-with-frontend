@@ -179,7 +179,11 @@ public class ExpenseServiceTest {
         claim.setEmployee(employee);
         claim.setTripRequest(trip);
 
+        ExpenseLine line = new ExpenseLine();
+        line.setReceiptRef("uploads/receipt.pdf");
+
         when(expenseClaimRepository.findById(claimId)).thenReturn(Optional.of(claim));
+        when(expenseLineRepository.findByExpenseClaim_Id(claimId)).thenReturn(Arrays.asList(line));
         when(expenseClaimRepository.save(any(ExpenseClaim.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         ExpenseClaim submitted = expenseService.submitExpenseClaim(claimId);

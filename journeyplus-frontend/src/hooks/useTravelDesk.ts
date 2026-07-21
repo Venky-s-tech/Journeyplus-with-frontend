@@ -45,6 +45,31 @@ export const useAddTravelDeskItinerary = (tripId: number) => {
   });
 };
 
+export const useUpdateTravelDeskItinerary = (tripId: number) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ legId, data }: { legId: number; data: any }) =>
+      travelDeskApi.updateItineraryLeg(tripId, legId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trip", tripId] });
+      queryClient.invalidateQueries({ queryKey: ["trip-travel-details", tripId] });
+      queryClient.invalidateQueries({ queryKey: ["traveldesk-bookings"] });
+    },
+  });
+};
+
+export const useDeleteTravelDeskItinerary = (tripId: number) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (legId: number) => travelDeskApi.deleteItineraryLeg(tripId, legId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trip", tripId] });
+      queryClient.invalidateQueries({ queryKey: ["trip-travel-details", tripId] });
+      queryClient.invalidateQueries({ queryKey: ["traveldesk-bookings"] });
+    },
+  });
+};
+
 export const useAddTravelDeskVisa = (tripId: number) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -53,6 +78,21 @@ export const useAddTravelDeskVisa = (tripId: number) => {
       queryClient.invalidateQueries({ queryKey: ["trip", tripId] });
       queryClient.invalidateQueries({ queryKey: ["trip-travel-details", tripId] });
       queryClient.invalidateQueries({ queryKey: ["traveldesk-bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["traveldesk-dashboard"] });
+    },
+  });
+};
+
+export const useUpdateTravelDeskVisaStatus = (tripId: number) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ visaId, status, notes }: { visaId: number; status: string; notes?: string }) =>
+      travelDeskApi.updateVisaRequirement(tripId, visaId, { status, notes }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["trip", tripId] });
+      queryClient.invalidateQueries({ queryKey: ["trip-travel-details", tripId] });
+      queryClient.invalidateQueries({ queryKey: ["traveldesk-bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["traveldesk-dashboard"] });
     },
   });
 };
@@ -62,6 +102,20 @@ export const useConfirmBooking = () => {
   return useMutation({
     mutationFn: ({ tripId, comments }: { tripId: number; comments?: string }) =>
       travelDeskApi.confirmBooking(tripId, comments),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["trip", variables.tripId] });
+      queryClient.invalidateQueries({ queryKey: ["trip-travel-details", variables.tripId] });
+      queryClient.invalidateQueries({ queryKey: ["traveldesk-bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["traveldesk-dashboard"] });
+    },
+  });
+};
+
+export const useRejectTripBack = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tripId, comments }: { tripId: number; comments?: string }) =>
+      travelDeskApi.rejectTripBack(tripId, comments),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["trip", variables.tripId] });
       queryClient.invalidateQueries({ queryKey: ["trip-travel-details", variables.tripId] });

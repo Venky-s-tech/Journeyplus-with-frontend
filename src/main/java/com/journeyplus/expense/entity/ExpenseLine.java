@@ -56,6 +56,18 @@ public class ExpenseLine {
     @Column(name = "receipt_path")
     private String receiptPath;
  
+    @Column(name = "receipt_ref")
+    private String receiptRef;
+ 
+    @Column(name = "merchant", length = 150)
+    private String merchant;
+ 
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+ 
+    @Column(name = "justification", columnDefinition = "TEXT")
+    private String justification;
+ 
     @Column(name = "policy_compliance_status", nullable = false, length = 50)
     private String policyComplianceStatus = "COMPLIANT"; // COMPLIANT, NON_COMPLIANT
  
@@ -79,8 +91,23 @@ public class ExpenseLine {
         this.originalCurrency = originalCurrency;
         this.usdEquivalent = usdEquivalent;
         this.receiptPath = receiptPath;
+        this.receiptRef = receiptPath;
         this.policyComplianceStatus = "COMPLIANT";
         this.policyCompliant = true;
         this.status = ExpenseLineStatus.INCLUDED;
+    }
+ 
+    public String getReceiptRef() {
+        if (receiptRef != null && !receiptRef.isBlank()) {
+            return receiptRef;
+        }
+        return receiptPath;
+    }
+ 
+    public void setReceiptRef(String receiptRef) {
+        this.receiptRef = receiptRef;
+        if (this.receiptPath == null || this.receiptPath.isBlank()) {
+            this.receiptPath = receiptRef;
+        }
     }
 }

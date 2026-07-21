@@ -9,6 +9,7 @@ import {
   useExceptions,
   useDashboardSummary,
 } from "../../hooks";
+import { useTravelDeskDashboard } from "../../hooks/useTravelDesk";
 import {
   Plane,
   Coins,
@@ -230,8 +231,22 @@ export const Dashboard: React.FC = () => {
     );
   };
 
+  const { data: travelDeskMetrics, isLoading: isTravelDeskLoading, isError: isTravelDeskError } = useTravelDeskDashboard();
+
   // Render Travel Desk Dashboard
   const renderTravelDesk = () => {
+    const metrics = travelDeskMetrics || summary;
+
+    const renderCardValue = (val: number | undefined, colorClass: string = "") => {
+      if (isTravelDeskLoading) {
+        return <div className="h-8 w-12 bg-muted rounded animate-pulse my-0.5" />;
+      }
+      if (isTravelDeskError) {
+        return <p className="text-2xl font-bold">--</p>;
+      }
+      return <p className={`text-2xl font-bold ${colorClass}`}>{val ?? 0}</p>;
+    };
+
     return (
       <div className="space-y-6 animate-in fade-in-50 duration-200">
         <h1 className="text-2xl font-bold">Travel Desk Dashboard</h1>
@@ -239,22 +254,22 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Pending Bookings</span>
-            <p className="text-2xl font-bold text-blue-600">{summary?.pendingBookings ?? 0}</p>
+            {renderCardValue(metrics?.pendingBookings, "text-blue-600")}
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Itinerary Legs</span>
-            <p className="text-2xl font-bold">{summary?.flightBookings ?? 0}</p>
+            {renderCardValue(metrics?.flightBookings)}
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Visa Requests</span>
-            <p className="text-2xl font-bold text-purple-600">{summary?.visaRequests ?? 0}</p>
+            {renderCardValue(metrics?.visaRequests, "text-purple-600")}
           </div>
 
           <div className="p-4 bg-card border border-border rounded-lg shadow-sm space-y-1">
             <span className="text-[10px] uppercase font-bold text-muted-foreground">Completed Itineraries</span>
-            <p className="text-2xl font-bold text-green-600">{summary?.completedItineraries ?? 0}</p>
+            {renderCardValue(metrics?.completedItineraries, "text-green-600")}
           </div>
         </div>
 

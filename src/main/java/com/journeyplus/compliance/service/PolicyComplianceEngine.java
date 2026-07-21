@@ -121,8 +121,20 @@ public class PolicyComplianceEngine {
             hasBreach = true;
         }
 
+        // Delete previous policy exceptions for this line before re-evaluation
+        if (line.getId() != null) {
+            try {
+                List<PolicyException> existingExceptions = policyExceptionRepository.findByExpenseLine_Id(line.getId());
+                if (existingExceptions != null && !existingExceptions.isEmpty()) {
+                    policyExceptionRepository.deleteAll(existingExceptions);
+                }
+            } catch (Exception e) {}
+        }
+
         // 3. Check for Missing Receipt
-        boolean isMissingReceipt = (line.getReceiptPath() == null || line.getReceiptPath().isBlank());
+        String rRef = line.getReceiptRef();
+        String rPath = line.getReceiptPath();
+        boolean isMissingReceipt = (rRef == null || rRef.isBlank()) && (rPath == null || rPath.isBlank());
         if (isMissingReceipt) {
             hasBreach = true;
             violations.append("Receipt is missing. ");
@@ -132,7 +144,7 @@ public class PolicyComplianceEngine {
         boolean isLateClaim = false;
         LocalDate returnDate = claim.getTripRequest().getReturnDate();
         LocalDate submissionDate = claim.getSubmittedDate() != null ? claim.getSubmittedDate() : LocalDate.now();
-        if (submissionDate.isAfter(returnDate.plusDays(30))) {
+        if (returnDate != null && submissionDate.isAfter(returnDate.plusDays(30))) {
             isLateClaim = true;
             hasBreach = true;
             violations.append("Late claim submission: submitted more than 30 days after trip return date. ");

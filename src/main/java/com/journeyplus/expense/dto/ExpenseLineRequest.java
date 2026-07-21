@@ -9,6 +9,10 @@ public class ExpenseLineRequest {
     private BigDecimal amount;
     private String originalCurrency;
     private String receiptPath;
+    private String receiptRef;
+    private String merchant;
+    private String description;
+    private String justification;
 
     public LocalDate getExpenseDate() {
         return expenseDate;
@@ -43,10 +47,42 @@ public class ExpenseLineRequest {
     }
 
     public String getReceiptPath() {
-        return receiptPath;
+        return receiptPath != null ? receiptPath : receiptRef;
     }
 
     public void setReceiptPath(String receiptPath) {
         this.receiptPath = receiptPath;
+    }
+
+    public String getReceiptRef() {
+        return receiptRef != null ? receiptRef : receiptPath;
+    }
+
+    public void setReceiptRef(String receiptRef) {
+        this.receiptRef = receiptRef;
+    }
+
+    public String getMerchant() {
+        return merchant;
+    }
+
+    public void setMerchant(String merchant) {
+        this.merchant = merchant;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getJustification() {
+        return justification;
+    }
+
+    public void setJustification(String justification) {
+        this.justification = justification;
     }
 }

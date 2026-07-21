@@ -28,6 +28,15 @@ export const addClaimLine = async (claimId: number, data: Partial<ExpenseLine>):
   return response.data;
 };
 
+export const updateClaimLine = async (claimId: number, lineId: number, data: Partial<ExpenseLine>): Promise<ExpenseLine> => {
+  const response = await api.put<ExpenseLine>(`/api/expenses/${claimId}/lines/${lineId}`, data);
+  return response.data;
+};
+
+export const deleteClaimLine = async (claimId: number, lineId: number): Promise<void> => {
+  await api.delete(`/api/expenses/${claimId}/lines/${lineId}`);
+};
+
 export const submitClaimLine = async (claimId: number, lineId: number): Promise<any> => {
   const response = await api.post(`/api/expenses/${claimId}/lines/${lineId}/submit`);
   return response.data;
@@ -65,7 +74,7 @@ export const reimburseClaim = async (
 };
 
 // Document Receipt Upload
-export const uploadReceipt = async (file: File): Promise<{ id: number; filePath: string }> => {
+export const uploadReceipt = async (file: File): Promise<{ id: number; filePath: string; receiptRef: string }> => {
   const formData = new FormData();
   formData.append("file", file);
   
@@ -74,7 +83,37 @@ export const uploadReceipt = async (file: File): Promise<{ id: number; filePath:
       "Content-Type": "multipart/form-data",
     },
   });
+
+  const doc = response.data;
+  const filePath = doc.path || `/api/documents/${doc.id}`;
+  const receiptRef = `/api/documents/${doc.id}`;
+
+  return {
+    id: doc.id,
+    filePath,
+    receiptRef,
+  };
+};
+
+export const uploadLineReceipt = async (claimId: number, lineId: number, file: File): Promise<ExpenseLine> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await api.post<ExpenseLine>(`/api/expenses/${claimId}/lines/${lineId}/receipt`, formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
   return response.data;
+};
+
+export const deleteLineReceipt = async (claimId: number, lineId: number): Promise<ExpenseLine> => {
+  const response = await api.delete<ExpenseLine>(`/api/expenses/${claimId}/lines/${lineId}/receipt`);
+  return response.data;
+};
+
+export const getLineReceiptUrl = (claimId: number, lineId: number): string => {
+  return `/api/expenses/${claimId}/lines/${lineId}/receipt`;
 };
 
 export const getDocumentDetails = async (id: number): Promise<any> => {

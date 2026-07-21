@@ -76,6 +76,7 @@ export type TripStatus =
   | "DRAFT"
   | "SUBMITTED"
   | "APPROVED"
+  | "BOOKED"
   | "REJECTED"
   | "COMPLETED"
   | "CANCELLED";
@@ -213,9 +214,14 @@ export interface ExpenseLine {
   originalCurrency: string;
   usdEquivalent?: number;
   receiptPath?: string;
+  receiptRef?: string;
+  merchant?: string;
+  description?: string;
+  justification?: string;
   status?: ExpenseLineStatus;
   policyComplianceStatus?: string;
   complianceRemarks?: string;
+  policyCompliant?: boolean;
 }
 
 export type ClaimStatus =

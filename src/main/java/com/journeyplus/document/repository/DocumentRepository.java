@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface DocumentRepository extends JpaRepository<Document, Long> {
     List<Document> findByOwnerId(Long ownerId);
+    List<Document> findByEntityTypeAndEntityId(String entityType, Long entityId);
+    List<Document> findByEntityTypeAndEntityIdAndStatus(String entityType, Long entityId, String status);
 }

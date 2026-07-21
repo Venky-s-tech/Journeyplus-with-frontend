@@ -25,12 +25,19 @@ public class ExpenseController {
     private final TripService tripService;
     private final UserRepository userRepository;
     private final com.journeyplus.expense.repository.ExpenseLineRepository expenseLineRepository;
+    private final com.journeyplus.document.service.DocumentService documentService;
 
-    public ExpenseController(ExpenseService expenseService, TripService tripService, UserRepository userRepository, com.journeyplus.expense.repository.ExpenseLineRepository expenseLineRepository) {
+    public ExpenseController(
+            ExpenseService expenseService,
+            TripService tripService,
+            UserRepository userRepository,
+            com.journeyplus.expense.repository.ExpenseLineRepository expenseLineRepository,
+            com.journeyplus.document.service.DocumentService documentService) {
         this.expenseService = expenseService;
         this.tripService = tripService;
         this.userRepository = userRepository;
         this.expenseLineRepository = expenseLineRepository;
+        this.documentService = documentService;
     }
 
     @PostMapping
@@ -80,9 +87,88 @@ public class ExpenseController {
         line.setCategory(lineRequest.getCategory());
         line.setAmount(lineRequest.getAmount());
         line.setOriginalCurrency(lineRequest.getOriginalCurrency());
+        line.setMerchant(lineRequest.getMerchant());
+        line.setDescription(lineRequest.getDescription());
+        line.setJustification(lineRequest.getJustification());
+        line.setReceiptRef(lineRequest.getReceiptRef());
         line.setReceiptPath(lineRequest.getReceiptPath());
 
         return ResponseEntity.ok(expenseService.addExpenseLine(claimId, line));
+    }
+
+    @PutMapping("/{claimId}/lines/{lineId}")
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    @Operation(summary = "Update an expense line", description = "Update an expense line details in a draft claim.")
+    public ResponseEntity<ExpenseLine> updateExpenseLine(
+            @PathVariable Long claimId,
+            @PathVariable Long lineId,
+            @RequestBody com.journeyplus.expense.dto.ExpenseLineRequest lineRequest) {
+        ExpenseLine lineDetails = new ExpenseLine();
+        lineDetails.setExpenseDate(lineRequest.getExpenseDate());
+        lineDetails.setCategory(lineRequest.getCategory());
+        lineDetails.setAmount(lineRequest.getAmount());
+        lineDetails.setOriginalCurrency(lineRequest.getOriginalCurrency());
+        lineDetails.setMerchant(lineRequest.getMerchant());
+        lineDetails.setDescription(lineRequest.getDescription());
+        lineDetails.setJustification(lineRequest.getJustification());
+        lineDetails.setReceiptRef(lineRequest.getReceiptRef());
+        lineDetails.setReceiptPath(lineRequest.getReceiptPath());
+
+        return ResponseEntity.ok(expenseService.updateExpenseLine(claimId, lineId, lineDetails));
+    }
+
+    @DeleteMapping("/{claimId}/lines/{lineId}")
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    @Operation(summary = "Delete an expense line", description = "Delete an expense line from a draft claim.")
+    public ResponseEntity<Void> deleteExpenseLine(
+            @PathVariable Long claimId,
+            @PathVariable Long lineId) {
+        expenseService.deleteExpenseLine(claimId, lineId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping(path = "/{claimId}/lines/{lineId}/receipt", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    @Operation(summary = "Upload or replace expense line receipt", description = "Upload a persistent receipt document (PDF, JPG, PNG) for an expense line.")
+    public ResponseEntity<ExpenseLine> uploadExpenseLineReceipt(
+            @PathVariable Long claimId,
+            @PathVariable Long lineId,
+            @RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @AuthenticationPrincipal User employee) throws java.io.IOException {
+        return ResponseEntity.ok(expenseService.uploadOrReplaceReceipt(claimId, lineId, file, employee));
+    }
+
+    @GetMapping("/{claimId}/lines/{lineId}/receipt")
+    @Operation(summary = "Download/stream expense line receipt", description = "Retrieve and stream the physical receipt document for an expense line.")
+    public ResponseEntity<byte[]> getExpenseLineReceipt(
+            @PathVariable Long claimId,
+            @PathVariable Long lineId,
+            @AuthenticationPrincipal User user) throws java.io.IOException {
+        ExpenseLine line = expenseLineRepository.findById(lineId)
+                .orElseThrow(() -> new IllegalArgumentException("Expense line not found: " + lineId));
+
+        java.util.Optional<com.journeyplus.document.entity.Document> docOpt = documentService.findActiveDocumentForEntity("EXPENSE_LINE", lineId);
+        if (docOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        com.journeyplus.document.entity.Document doc = docOpt.get();
+        byte[] data = documentService.loadContent(doc);
+
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + doc.getOriginalFileName() + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType(doc.getContentType() != null ? doc.getContentType() : "application/pdf"))
+                .body(data);
+    }
+
+    @DeleteMapping("/{claimId}/lines/{lineId}/receipt")
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    @Operation(summary = "Delete expense line receipt", description = "Remove receipt reference and mark document as DELETED.")
+    public ResponseEntity<ExpenseLine> deleteExpenseLineReceipt(
+            @PathVariable Long claimId,
+            @PathVariable Long lineId,
+            @AuthenticationPrincipal User employee) throws java.io.IOException {
+        return ResponseEntity.ok(expenseService.deleteExpenseLineReceipt(claimId, lineId, employee));
     }
 
     @PostMapping("/{claimId}/lines/{lineId}/submit")

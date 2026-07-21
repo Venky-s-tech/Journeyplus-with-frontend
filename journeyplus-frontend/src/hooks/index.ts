@@ -335,6 +335,56 @@ export const useAddClaimLine = (claimId: number) => {
   });
 };
 
+export const useUpdateClaimLine = (claimId: number) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lineId, data }: { lineId: number; data: any }) =>
+      expensesApi.updateClaimLine(claimId, lineId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-lines", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["exceptions"] });
+    },
+  });
+};
+
+export const useDeleteClaimLine = (claimId: number) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lineId: number) => expensesApi.deleteClaimLine(claimId, lineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-lines", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["exceptions"] });
+    },
+  });
+};
+
+export const useUploadLineReceipt = (claimId: number) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ lineId, file }: { lineId: number; file: File }) =>
+      expensesApi.uploadLineReceipt(claimId, lineId, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-lines", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["exceptions"] });
+    },
+  });
+};
+
+export const useDeleteLineReceipt = (claimId: number) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lineId: number) => expensesApi.deleteLineReceipt(claimId, lineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["claim", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["claim-lines", claimId] });
+      queryClient.invalidateQueries({ queryKey: ["exceptions"] });
+    },
+  });
+};
+
 export const useSubmitClaimLine = (claimId: number) => {
   const queryClient = useQueryClient();
   return useMutation({

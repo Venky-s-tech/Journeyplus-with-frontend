@@ -5,6 +5,10 @@ import {
   useClaim,
   useClaimLines,
   useAddClaimLine,
+  useUpdateClaimLine,
+  useDeleteClaimLine,
+  useUploadLineReceipt,
+  useDeleteLineReceipt,
   useSubmitClaimLine,
   useSubmitClaim,
   useApproveClaim,
@@ -12,7 +16,7 @@ import {
   useReimburseClaim,
   useTrip,
 } from "../../hooks";
-import { uploadReceipt } from "../../api/expenses";
+import { uploadReceipt, getLineReceiptUrl } from "../../api/expenses";
 import { useToast } from "../../components/ui/toast";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -29,6 +33,12 @@ import {
   Image as ImageIcon,
   X,
   Briefcase,
+  Pencil,
+  Trash2,
+  CheckCircle2,
+  Eye,
+  Download,
+  RefreshCw,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../../components/ui/dialog";
 
@@ -59,14 +69,48 @@ export const ExpenseDetails: React.FC = () => {
 
   // Mutations
   const addLineMutation = useAddClaimLine(claimId);
+  const updateLineMutation = useUpdateClaimLine(claimId);
+  const deleteLineMutation = useDeleteClaimLine(claimId);
+  const uploadLineReceiptMutation = useUploadLineReceipt(claimId);
+  const deleteLineReceiptMutation = useDeleteLineReceipt(claimId);
   const submitLineMutation = useSubmitClaimLine(claimId);
   const submitClaimMutation = useSubmitClaim();
   const approveClaimMutation = useApproveClaim();
   const rejectClaimMutation = useRejectClaim();
   const reimburseClaimMutation = useReimburseClaim();
 
+  // Hidden file input refs per line item
+  const lineFileInputRefs = useRef<{ [lineId: number]: HTMLInputElement | null }>({});
+
+  const handleLineFileChange = (lineId: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    uploadLineReceiptMutation.mutate(
+      { lineId, file },
+      {
+        onSuccess: () => {
+          toast("Receipt uploaded & compliance re-evaluated", "success", "Receipt Updated");
+        },
+        onError: (err: any) => {
+          toast(err.response?.data?.message || "Failed to upload receipt", "error");
+        },
+      }
+    );
+  };
+
+  const handleLineFileDelete = (lineId: number) => {
+    if (confirm("Remove receipt document from this expense line?")) {
+      deleteLineReceiptMutation.mutate(lineId, {
+        onSuccess: () => {
+          toast("Receipt removed from line item", "success", "Receipt Removed");
+        },
+      });
+    }
+  };
+
   // State
   const [isLineDialogOpen, setIsLineDialogOpen] = useState(false);
+  const [editingLineId, setEditingLineId] = useState<number | null>(null);
   const [isReimburseDialogOpen, setIsReimburseDialogOpen] = useState(false);
   const [managerComment, setManagerComment] = useState("");
 
@@ -74,7 +118,11 @@ export const ExpenseDetails: React.FC = () => {
   const [expenseDate, setExpenseDate] = useState("");
   const [category, setCategory] = useState<"ACCOMMODATION" | "MEALS" | "TRANSPORT" | "VISA" | "MISC">("MEALS");
   const [amount, setAmount] = useState(0);
+  const [merchant, setMerchant] = useState("");
+  const [description, setDescription] = useState("");
+  const [justification, setJustification] = useState("");
   const [receiptPath, setReceiptPath] = useState("");
+  const [receiptRef, setReceiptRef] = useState("");
   const [receiptFileName, setReceiptFileName] = useState("");
   const [receiptFileType, setReceiptFileType] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -109,10 +157,6 @@ export const ExpenseDetails: React.FC = () => {
   const isFinance = user?.role === "FINANCE";
   const expenseLines = lines || [];
 
-  // Item 3: the real backend field names are `advanceAdjusted` and
-  // `netReimbursable` (computed server-side in
-  // ExpenseService#calculateAdvanceAndNetReimbursable), not
-  // advanceClaimed/netReimbursed - use them directly rather than guessing.
   const advanceAdjusted = claim.advanceAdjusted ?? 0;
   const netReimbursable = claim.netReimbursable ?? claim.totalAmount;
   const approverUsername = claim.approverUsername || linkedTrip?.approver?.username || "—";
@@ -121,7 +165,6 @@ export const ExpenseDetails: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Item 4: restrict to PDF, JPEG, PNG only.
     if (!ALLOWED_FILE_TYPES.includes(file.type)) {
       toast("Only PDF, JPEG, or PNG files are allowed", "error", "Invalid File Type");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -132,6 +175,7 @@ export const ExpenseDetails: React.FC = () => {
     try {
       const data = await uploadReceipt(file);
       setReceiptPath(data.filePath);
+      setReceiptRef(data.receiptRef);
       setReceiptFileName(file.name);
       setReceiptFileType(file.type);
       toast("Receipt uploaded successfully", "success", "Uploaded");
@@ -144,34 +188,94 @@ export const ExpenseDetails: React.FC = () => {
 
   const handleRemoveAttachment = () => {
     setReceiptPath("");
+    setReceiptRef("");
     setReceiptFileName("");
     setReceiptFileType("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleAddLine = (e: React.FormEvent) => {
+  const handleOpenAddLine = () => {
+    setEditingLineId(null);
+    setCategory("MEALS");
+    setExpenseDate(new Date().toISOString().split("T")[0]);
+    setAmount(0);
+    setMerchant("");
+    setDescription("");
+    setJustification("");
+    handleRemoveAttachment();
+    setIsLineDialogOpen(true);
+  };
+
+  const handleOpenEditLine = (line: any) => {
+    setEditingLineId(line.id);
+    setCategory(line.category || "MEALS");
+    setExpenseDate(line.expenseDate || "");
+    setAmount(line.amount || 0);
+    setMerchant(line.merchant || "");
+    setDescription(line.description || "");
+    setJustification(line.justification || "");
+    setReceiptPath(line.receiptPath || "");
+    setReceiptRef(line.receiptRef || line.receiptPath || "");
+    if (line.receiptRef || line.receiptPath) {
+      setReceiptFileName("Receipt Document");
+    } else {
+      setReceiptFileName("");
+    }
+    setIsLineDialogOpen(true);
+  };
+
+  const handleSaveLine = (e: React.FormEvent) => {
     e.preventDefault();
-    addLineMutation.mutate(
-      {
-        expenseDate,
-        category,
-        amount: Number(amount),
-        originalCurrency: "USD",
-        receiptPath,
-      },
-      {
+    const lineData = {
+      expenseDate,
+      category,
+      amount: Number(amount),
+      originalCurrency: "USD",
+      merchant,
+      description,
+      justification,
+      receiptRef,
+      receiptPath,
+    };
+
+    if (editingLineId) {
+      updateLineMutation.mutate(
+        { lineId: editingLineId, data: lineData },
+        {
+          onSuccess: () => {
+            toast("Expense line item updated", "success", "Updated");
+            setIsLineDialogOpen(false);
+            setEditingLineId(null);
+          },
+          onError: (err: any) => {
+            toast(err.response?.data?.message || "Failed to update line item", "error");
+          },
+        }
+      );
+    } else {
+      addLineMutation.mutate(lineData, {
         onSuccess: () => {
           toast("Expense line item added", "success", "Added");
           setIsLineDialogOpen(false);
-          setExpenseDate("");
-          setAmount(0);
-          handleRemoveAttachment();
         },
         onError: (err: any) => {
           toast(err.response?.data?.message || "Failed to add line item", "error");
         },
-      }
-    );
+      });
+    }
+  };
+
+  const handleDeleteLine = (lineId: number) => {
+    if (confirm("Are you sure you want to delete this expense line?")) {
+      deleteLineMutation.mutate(lineId, {
+        onSuccess: () => {
+          toast("Expense line deleted", "success", "Deleted");
+        },
+        onError: (err: any) => {
+          toast(err.response?.data?.message || "Failed to delete expense line", "error");
+        },
+      });
+    }
   };
 
   const handleSubmitLine = (lineId: number) => {
@@ -403,23 +507,29 @@ export const ExpenseDetails: React.FC = () => {
                 <Receipt className="h-4 w-4 text-muted-foreground" /> Receipts & Invoices
               </h2>
               {isEmployee && claim.status === "DRAFT" && (
-                <Dialog
-                  open={isLineDialogOpen}
-                  onOpenChange={(open) => {
-                    setIsLineDialogOpen(open);
-                    if (!open) handleRemoveAttachment();
-                  }}
-                >
-                  <DialogTrigger asChild>
-                    <Button size="sm" className="gap-1 h-7 text-xs bg-purple-600 hover:bg-purple-700">
-                      <Plus className="h-3.5 w-3.5" /> Add Receipt
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-sm">
-                    <DialogHeader>
-                      <DialogTitle>Add Expense Line</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleAddLine} className="space-y-3 text-xs">
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={handleOpenAddLine} className="gap-1 h-7 text-xs bg-purple-600 hover:bg-purple-700">
+                    <Plus className="h-3.5 w-3.5" /> Add Expense Item
+                  </Button>
+                </div>
+              )}
+
+              <Dialog
+                open={isLineDialogOpen}
+                onOpenChange={(open) => {
+                  setIsLineDialogOpen(open);
+                  if (!open) {
+                    setEditingLineId(null);
+                    handleRemoveAttachment();
+                  }
+                }}
+              >
+                <DialogContent className="max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>{editingLineId ? "Edit Expense Line" : "Add Expense Line"}</DialogTitle>
+                  </DialogHeader>
+                  <form onSubmit={handleSaveLine} className="space-y-3 text-xs">
+                    <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label>Category</Label>
                         <select
@@ -435,117 +545,250 @@ export const ExpenseDetails: React.FC = () => {
                         </select>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <Label>Date</Label>
-                          <Input type="date" required value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Amount (USD)</Label>
-                          <Input type="number" required min={1} value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
-                        </div>
-                      </div>
-
-                      {/* Item 4: Document Add attachment control */}
                       <div className="space-y-1">
-                        <Label>Attachment</Label>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept={ALLOWED_FILE_EXTENSIONS}
-                          onChange={handleFileUpload}
+                        <Label>Expense Date</Label>
+                        <Input type="date" required value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label>Amount (USD)</Label>
+                        <Input type="number" required min={1} value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label>Merchant / Vendor</Label>
+                        <Input placeholder="e.g. Uber, Hilton, Delta" value={merchant} onChange={(e) => setMerchant(e.target.value)} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label>Description / Item Details</Label>
+                      <Input placeholder="e.g. Taxi fare to client site" value={description} onChange={(e) => setDescription(e.target.value)} />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label>Justification (Optional)</Label>
+                      <Input placeholder="Reason if exceeding standard policy" value={justification} onChange={(e) => setJustification(e.target.value)} />
+                    </div>
+
+                    {/* Receipt Attachment control */}
+                    <div className="space-y-1">
+                      <Label>Receipt Attachment</Label>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept={ALLOWED_FILE_EXTENSIONS}
+                        onChange={handleFileUpload}
+                        disabled={isUploading}
+                        className="hidden"
+                      />
+
+                      {!receiptFileName && !receiptRef && !receiptPath ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 h-8 text-xs w-full justify-center"
                           disabled={isUploading}
-                          className="hidden"
-                        />
-
-                        {!receiptFileName ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="gap-1.5 h-8 text-xs w-full justify-center"
-                            disabled={isUploading}
-                            onClick={() => fileInputRef.current?.click()}
-                          >
-                            <Paperclip className="h-3.5 w-3.5" />
-                            {isUploading ? "Uploading..." : "Document Add"}
-                          </Button>
-                        ) : (
-                          <div className="flex items-center justify-between gap-2 p-2 border rounded-md bg-muted/20">
-                            <div className="flex items-center gap-2 min-w-0">
-                              {receiptFileType === "application/pdf" ? (
-                                <FileText className="h-4 w-4 text-red-500 shrink-0" />
-                              ) : (
-                                <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" />
-                              )}
-                              <span className="text-[11px] text-foreground truncate">{receiptFileName}</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={handleRemoveAttachment}
-                              className="text-muted-foreground hover:text-destructive shrink-0"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Paperclip className="h-3.5 w-3.5" />
+                          {isUploading ? "Uploading file..." : "Upload Receipt Document"}
+                        </Button>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2 p-2 border rounded-md bg-muted/20">
+                          <div className="flex items-center gap-2 min-w-0">
+                            {receiptFileType === "application/pdf" ? (
+                              <FileText className="h-4 w-4 text-red-500 shrink-0" />
+                            ) : (
+                              <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" />
+                            )}
+                            <span className="text-[11px] text-foreground truncate">{receiptFileName || "Receipt File Linked"}</span>
                           </div>
-                        )}
-                        <p className="text-[10px] text-muted-foreground">Accepted formats: PDF, JPEG, PNG.</p>
-                      </div>
+                          <button
+                            type="button"
+                            onClick={handleRemoveAttachment}
+                            className="text-muted-foreground hover:text-destructive shrink-0"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">Formats allowed: PDF, JPEG, PNG. Essential for policy compliance.</p>
+                    </div>
 
-                      <div className="flex justify-end gap-2 pt-2">
-                        <Button type="button" variant="outline" onClick={() => setIsLineDialogOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button type="submit" disabled={addLineMutation.isPending || isUploading}>
-                          Save item
-                        </Button>
-                      </div>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-              )}
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button type="button" variant="outline" onClick={() => setIsLineDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={addLineMutation.isPending || updateLineMutation.isPending || isUploading}>
+                        {editingLineId ? "Update Item" : "Save Item"}
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+              </Dialog>
             </div>
 
-            {/* List - sourced from useClaimLines (separate endpoint), NOT
-                claim.expenseLines which the backend never populates */}
+            {/* List of Expense Lines */}
             <div className="divide-y divide-border">
               {linesLoading ? (
                 <div className="flex h-16 items-center justify-center">
                   <div className="h-5 w-5 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
                 </div>
               ) : expenseLines.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-4 text-center">No lines added yet.</p>
+                <p className="text-xs text-muted-foreground py-6 text-center">No expense lines added yet. Click 'Add Expense Item' to begin logging receipts.</p>
               ) : (
-                expenseLines.map((line) => (
-                  <div key={line.id} className="py-3 flex items-center justify-between text-xs gap-3">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{line.category}</span>
-                        <StatusBadge status={line.status || "INCLUDED"} />
-                      </div>
-                      <p className="text-[10px] text-muted-foreground">Date: {formatDate(line.expenseDate)}</p>
-                      {line.receiptPath && (
-                        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                          <Paperclip className="h-3 w-3" /> Attachment on file
-                        </p>
-                      )}
-                      {line.complianceRemarks && (
-                        <p className="text-[10px] text-amber-600 flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> {line.complianceRemarks}
-                        </p>
-                      )}
-                    </div>
+                expenseLines.map((line) => {
+                  const hasReceipt = !!(line.receiptRef || line.receiptPath);
+                  const isCompliant = line.status === "INCLUDED" && line.policyCompliant;
+                  const receiptUrl = getLineReceiptUrl(claimId, line.id);
 
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-primary">{formatCurrency(line.amount, line.originalCurrency)}</span>
-                      {isEmployee && claim.status === "DRAFT" && line.status !== "INCLUDED" && (
-                        <Button size="sm" variant="outline" onClick={() => handleSubmitLine(line.id)}>
-                          Audit Line
-                        </Button>
-                      )}
+                  return (
+                    <div key={line.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-3">
+                      {/* Hidden File Input for Line Receipt Upload/Replace */}
+                      <input
+                        type="file"
+                        ref={(el) => { lineFileInputRefs.current[line.id] = el; }}
+                        className="hidden"
+                        accept={ALLOWED_FILE_EXTENSIONS}
+                        onChange={(e) => handleLineFileChange(line.id, e)}
+                      />
+
+                      <div className="space-y-1 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-foreground">{line.category}</span>
+                          {line.merchant && <span className="text-muted-foreground">• {line.merchant}</span>}
+
+                          {/* Policy Status Badge */}
+                          {isCompliant ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400">
+                              <CheckCircle2 className="h-3 w-3" /> Policy Compliant
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
+                              <AlertTriangle className="h-3 w-3" /> Flagged Exception
+                            </span>
+                          )}
+
+                          {/* Receipt Status Badge & Action Controls */}
+                          {hasReceipt ? (
+                            <div className="inline-flex items-center gap-1">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400">
+                                <Paperclip className="h-3 w-3" /> Receipt Available
+                              </span>
+                              
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 text-[10px] px-1.5 gap-1 text-blue-600 hover:text-blue-700"
+                                onClick={() => window.open(receiptUrl, "_blank")}
+                                title="View Receipt Document"
+                              >
+                                <Eye className="h-3 w-3" /> View
+                              </Button>
+
+                              <a
+                                href={receiptUrl}
+                                download
+                                className="inline-flex items-center gap-1 h-6 text-[10px] px-1.5 font-medium text-muted-foreground hover:text-foreground"
+                                title="Download Receipt"
+                              >
+                                <Download className="h-3 w-3" /> Download
+                              </a>
+
+                              {isEmployee && claim.status === "DRAFT" && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 text-[10px] px-1.5 gap-1 text-muted-foreground hover:text-foreground"
+                                    onClick={() => lineFileInputRefs.current[line.id]?.click()}
+                                    title="Replace Receipt File"
+                                    disabled={uploadLineReceiptMutation.isPending}
+                                  >
+                                    <RefreshCw className="h-3 w-3" /> Replace
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 text-[10px] px-1 text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleLineFileDelete(line.id)}
+                                    title="Remove Receipt File"
+                                    disabled={deleteLineReceiptMutation.isPending}
+                                  >
+                                    <X className="h-3 w-3" /> Remove
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400">
+                                <AlertTriangle className="h-3 w-3" /> Missing Receipt
+                              </span>
+                              {isEmployee && claim.status === "DRAFT" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 text-[10px] px-2 gap-1 border-primary text-primary hover:bg-primary/10"
+                                  onClick={() => lineFileInputRefs.current[line.id]?.click()}
+                                  disabled={uploadLineReceiptMutation.isPending}
+                                >
+                                  <Paperclip className="h-3 w-3" /> Upload Receipt
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground">
+                          Date: {formatDate(line.expenseDate)} {line.description && `— ${line.description}`}
+                        </p>
+
+                        {line.complianceRemarks && !isCompliant && (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                            <AlertTriangle className="h-3 w-3 shrink-0" /> {line.complianceRemarks}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-0 border-border">
+                        <span className="font-bold text-sm text-primary">{formatCurrency(line.amount, line.originalCurrency)}</span>
+
+                        {isEmployee && claim.status === "DRAFT" && (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                              onClick={() => handleOpenEditLine(line)}
+                              title="Edit Expense Line"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => handleDeleteLine(line.id)}
+                              title="Delete Expense Line"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                            {!isCompliant && (
+                              <Button size="sm" variant="outline" className="h-7 text-[10px] px-2" onClick={() => handleSubmitLine(line.id)}>
+                                Re-audit
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
