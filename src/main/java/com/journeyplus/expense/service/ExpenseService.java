@@ -145,7 +145,10 @@ public class ExpenseService {
         com.journeyplus.trip.entity.TripRequest trip = tripRequestRepository.findById(claim.getTripRequest().getId())
                 .orElseThrow(() -> new IllegalArgumentException("Associated Trip Request not found"));
         if (trip.getStatus() != com.journeyplus.trip.entity.TripStatus.COMPLETED) {
-            throw new IllegalStateException("Expense claims can only be raised against COMPLETED trip requests");
+            throw new IllegalStateException("Expense claims can only be created for completed trips.");
+        }
+        if (claim.getEmployee() != null && trip.getEmployee() != null && !trip.getEmployee().getId().equals(claim.getEmployee().getId())) {
+            throw new org.springframework.security.access.AccessDeniedException("You can only raise expense claims against your own completed trips.");
         }
 
         // Check if expense lines already exist for this trip
@@ -242,7 +245,7 @@ public class ExpenseService {
         BigDecimal totalClaimed = BigDecimal.ZERO;
         BigDecimal usdTotal = BigDecimal.ZERO;
         for (ExpenseLine l : lines) {
-            if (l.getStatus() == com.journeyplus.expense.entity.ExpenseLineStatus.INCLUDED) {
+            if (l.getStatus() != com.journeyplus.expense.entity.ExpenseLineStatus.REJECTED) {
                 totalClaimed = totalClaimed.add(l.getAmount());
                 usdTotal = usdTotal.add(l.getUsdEquivalent());
             }

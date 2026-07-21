@@ -151,15 +151,14 @@ public class TripRequestController {
     }
 
     @PostMapping("/{id}/complete")
-    @PreAuthorize("hasAnyRole('EMPLOYEE', 'TRAVEL_DESK')")
+    @PreAuthorize("hasRole('EMPLOYEE')")
     public ResponseEntity<TripResponse> completeTripRequest(@PathVariable Long id, @AuthenticationPrincipal User user) {
         TripRequest trip = tripService.getTripRequest(id);
 
-        // Ownership or Travel Desk check
-        boolean isOwner = trip.getEmployee().getId().equals(user.getId());
-        boolean isTravelDesk = user.getRole() == com.journeyplus.iam.entity.Role.TRAVEL_DESK || user.getRole() == com.journeyplus.iam.entity.Role.ADMIN;
-        if (!isOwner && !isTravelDesk) {
-            throw new org.springframework.security.access.AccessDeniedException("Only the Trip Owner or Travel Desk can complete this trip");
+        // Ownership check - only the employee who owns the trip can mark it as completed
+        boolean isOwner = trip.getEmployee() != null && trip.getEmployee().getId().equals(user.getId());
+        if (!isOwner) {
+            throw new org.springframework.security.access.AccessDeniedException("Only the employee who owns this trip can mark it as completed");
         }
 
         TripRequest saved = tripService.completeOrCancelTripRequest(id, TripStatus.COMPLETED);
@@ -209,6 +208,22 @@ public class TripRequestController {
             throw new IllegalArgumentException("Status is required");
         }
         TripStatus newStatus = TripStatus.valueOf(statusStr.toUpperCase());
+        TripRequest trip = tripService.getTripRequest(id);
+
+        if (newStatus == TripStatus.COMPLETED) {
+            if (user == null || user.getRole() != com.journeyplus.iam.entity.Role.EMPLOYEE) {
+                throw new org.springframework.security.access.AccessDeniedException("Only employees can mark trips as completed");
+            }
+            boolean isOwner = trip.getEmployee() != null && trip.getEmployee().getId().equals(user.getId());
+            if (!isOwner) {
+                throw new org.springframework.security.access.AccessDeniedException("Only the employee who owns this trip can mark it as completed");
+            }
+        } else if (newStatus == TripStatus.BOOKED) {
+            if (user == null || (user.getRole() != com.journeyplus.iam.entity.Role.TRAVEL_DESK && user.getRole() != com.journeyplus.iam.entity.Role.ADMIN)) {
+                throw new org.springframework.security.access.AccessDeniedException("Only Travel Desk can mark trips as booked");
+            }
+        }
+
         TripRequest saved;
         if (newStatus == TripStatus.SUBMITTED) {
             saved = tripService.submitTripRequest(id);

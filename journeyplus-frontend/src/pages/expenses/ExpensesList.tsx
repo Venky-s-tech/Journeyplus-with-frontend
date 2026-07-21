@@ -201,7 +201,7 @@ export const ExpensesList: React.FC = () => {
                   <AlertCircle className="h-5 w-5 shrink-0" />
                   <div>
                     <span className="font-semibold block mb-0.5">No Completed Trips Found</span>
-                    Expense claims can only be filed against trip requests that have completed all bookings and are marked as COMPLETED by the Travel Desk.
+                    Expense claims can only be filed against trip requests that have completed travel and are marked as COMPLETED by the employee.
                   </div>
                 </div>
               ) : (

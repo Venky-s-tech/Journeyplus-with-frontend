@@ -268,11 +268,17 @@ export const TripDetails: React.FC = () => {
             </Button>
           )}
 
-          {/* Travel Desk actions */}
-          {/* Item 1: Complete button — shown only when status is APPROVED, Travel Desk only */}
-          {isTD && trip.status === "APPROVED" && (
-            <Button onClick={() => handleAction(completeMutation, "COMPLETED")} className="bg-purple-600 hover:bg-purple-700">
-              Complete
+          {/* Employee actions: Allow trip owner to mark BOOKED trip as COMPLETED */}
+          {isOwner && trip.status === "BOOKED" && (
+            <Button
+              onClick={() => {
+                if (window.confirm("Have you completed your business trip? Once completed, you can submit your expense claim and settle eligible travel advances.")) {
+                  handleAction(completeMutation, "COMPLETED");
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5"
+            >
+              <CheckCircle className="h-4 w-4" /> Mark Trip as Completed
             </Button>
           )}
 

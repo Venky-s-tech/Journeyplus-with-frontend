@@ -237,6 +237,11 @@ public class AdvanceService {
             throw new IllegalStateException("Settlement can only occur after advance is DISBURSED");
         }
 
+        // Enforce: If advance is linked to a trip, the trip must be COMPLETED before settlement
+        if (request.getTripRequest() != null && request.getTripRequest().getStatus() != com.journeyplus.trip.entity.TripStatus.COMPLETED) {
+            throw new IllegalStateException("Advance settlement can only occur after the trip is marked as COMPLETED.");
+        }
+
         // Validate amounts
         if (settlement.getAmountUtilised() == null || settlement.getAmountUtilised().compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("AmountUtilised must be non-negative");

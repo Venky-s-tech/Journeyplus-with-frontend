@@ -78,11 +78,7 @@ export const uploadReceipt = async (file: File): Promise<{ id: number; filePath:
   const formData = new FormData();
   formData.append("file", file);
   
-  const response = await api.post("/api/documents/upload", formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
+  const response = await api.post("/api/documents/upload", formData);
 
   const doc = response.data;
   const filePath = doc.path || `/api/documents/${doc.id}`;
@@ -99,11 +95,7 @@ export const uploadLineReceipt = async (claimId: number, lineId: number, file: F
   const formData = new FormData();
   formData.append("file", file);
 
-  const response = await api.post<ExpenseLine>(`/api/expenses/${claimId}/lines/${lineId}/receipt`, formData, {
-    headers: {
-      "Content-Type": "multipart/form-data",
-    },
-  });
+  const response = await api.post<ExpenseLine>(`/api/expenses/${claimId}/lines/${lineId}/receipt`, formData);
   return response.data;
 };
 

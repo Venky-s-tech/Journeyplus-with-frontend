@@ -255,15 +255,12 @@ public class TripService {
 
         // Validate Transitions
         if (newStatus == TripStatus.COMPLETED) {
-            if (trip.getStatus() != TripStatus.APPROVED) {
-                throw new IllegalStateException("Only APPROVED trips can be marked as COMPLETED");
+            if (trip.getStatus() != TripStatus.BOOKED) {
+                throw new IllegalStateException("Trip must be BOOKED before it can be marked as COMPLETED.");
             }
         } else if (newStatus == TripStatus.CANCELLED) {
             if (trip.getStatus() == TripStatus.COMPLETED || trip.getStatus() == TripStatus.CANCELLED) {
                 throw new IllegalStateException("Cannot cancel a completed or already cancelled trip");
-            }
-            if (trip.getStatus() != TripStatus.APPROVED) {
-                throw new IllegalStateException("Only APPROVED trips can be CANCELLED");
             }
         } else {
             throw new IllegalArgumentException("Invalid target status. Must be COMPLETED or CANCELLED");

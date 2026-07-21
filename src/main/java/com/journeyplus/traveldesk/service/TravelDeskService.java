@@ -245,7 +245,7 @@ public class TravelDeskService {
         trip.setStatus(TripStatus.BOOKED);
         trip.setBookingStatus("CONFIRMED");
         trip.setTravelDeskStatus("CONFIRMED");
-        trip.setWorkflowStage("COMPLETED");
+        trip.setWorkflowStage("LOGISTICS_COMPLETED");
         if (comments != null && !comments.isBlank()) {
             trip.setComments(comments);
         }

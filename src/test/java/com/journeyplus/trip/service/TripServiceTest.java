@@ -201,7 +201,7 @@ public class TripServiceTest {
 
         TripRequest trip = new TripRequest();
         trip.setId(tripId);
-        trip.setStatus(TripStatus.APPROVED);
+        trip.setStatus(TripStatus.BOOKED);
         trip.setEmployee(employee);
 
         when(tripRequestRepository.findById(tripId)).thenReturn(Optional.of(trip));
@@ -227,7 +227,7 @@ public class TripServiceTest {
             tripService.completeOrCancelTripRequest(tripId, TripStatus.COMPLETED);
         });
 
-        assertEquals("Only APPROVED trips can be marked as COMPLETED", exception.getMessage());
+        assertEquals("Trip must be BOOKED before it can be marked as COMPLETED.", exception.getMessage());
     }
 
     @Test
